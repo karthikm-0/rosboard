@@ -19,7 +19,12 @@
         <script type="text/javascript" src="js/leaflet.js"></script>        
 	      <script type="text/javascript" src="js/gl-matrix.js"></script>
 	      <script type="text/javascript" src="js/litegl.min.js"></script>
+        <!-- SubT customization: config must run before index.js (both defer = in order) -->
+        <script type="text/javascript" src="js/subt_config.js" defer></script>
         <script type="text/javascript" src="js/index.js" defer></script>
+        <!-- joystick publishes via rosbridge using roslibjs -->
+        <script type="text/javascript" src="js/roslib.min.js"></script>
+        <script type="text/javascript" src="js/subt_joystick.js" defer></script>
 
         <title>ROSboard</title>
     </head>

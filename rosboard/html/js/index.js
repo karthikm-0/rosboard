@@ -78,6 +78,12 @@ function newCard() {
 }
 
 let onOpen = function() {
+  // SubT lockdown: ignore stored/URL subscriptions. The whitelist is subscribed
+  // from onTopics instead (so the grid is ready and the type matches the server).
+  if (window.SUBT && window.SUBT.lockdown) {
+    return;
+  }
+
   const urlParams = new URLSearchParams(window.location.search);
 
   for( let [key, value] of urlParams ){
@@ -126,7 +132,18 @@ let currentTopics = {};
 let currentTopicsStr = "";
 
 let onTopics = function(topics) {
-  
+  // SubT lockdown: no topic browser. Auto-subscribe to whitelisted topics as
+  // soon as the server advertises them, using the server-advertised type.
+  if (window.SUBT && window.SUBT.lockdown) {
+    window.SUBT.whitelist.forEach(t => {
+      let serverType = topics[t.topicName];
+      if (serverType && !subscriptions[t.topicName]) {
+        initSubscribe({topicName: t.topicName, topicType: serverType});
+      }
+    });
+    return;
+  }
+
   // check if topics has actually changed, if not, don't do anything
   // lazy shortcut to deep compares, might possibly even be faster than
   // implementing a deep compare due to
@@ -205,6 +222,11 @@ function addTopicTreeToNav(topicTree, el, level = 0, path = "") {
 }
 
 function initSubscribe({topicName, topicType}) {
+  // SubT lockdown: block anything not on the whitelist.
+  if (window.SUBT && window.SUBT.lockdown && !window.SUBT.isWhitelisted(topicName)) {
+    console.log("Blocked non-whitelisted subscribe: " + topicName);
+    return;
+  }
   console.log( "Subscribing to " + topicName + " of type " + topicType);
   // creates a subscriber for topicName
   // and also initializes a viewer (if it doesn't already exist)
@@ -289,6 +311,9 @@ $(() => {
 });
 
 Viewer.onClose = function(viewerInstance) {
+  // SubT lockdown: views are fixed — ignore the close button.
+  if (window.SUBT && window.SUBT.lockdown) return;
+
   let topicName = viewerInstance.topicName;
   let topicType = viewerInstance.topicType;
   currentTransport.unsubscribe({topicName:topicName});
