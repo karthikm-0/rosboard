@@ -26,7 +26,13 @@ var snackbarContainer = document.querySelector('#demo-toast-example');
 
 let subscriptions = {};
 
-if(window.localStorage && window.localStorage.subscriptions) {
+// SubT: the participant view is defined entirely by the server-advertised
+// whitelist (auto-subscribed in onTopics). Ignore any stored subscriptions so a
+// stale browser localStorage can never alter or blank a participant's view.
+if(window.SUBT && window.SUBT.whitelist) {
+  subscriptions = {};
+  try { if(window.localStorage) window.localStorage.removeItem('subscriptions'); } catch(e) {}
+} else if(window.localStorage && window.localStorage.subscriptions) {
   if(window.location.search && window.location.search.indexOf("reset") !== -1) {
     subscriptions = {};
     updateStoredSubscriptions();
@@ -132,15 +138,19 @@ let currentTopics = {};
 let currentTopicsStr = "";
 
 let onTopics = function(topics) {
-  // SubT lockdown: no topic browser. Auto-subscribe to whitelisted topics as
-  // soon as the server advertises them, using the server-advertised type.
-  if (window.SUBT && window.SUBT.lockdown) {
+  // SubT: auto-subscribe the whitelisted topics as soon as the server advertises
+  // them, so the fixed participant view (camera + scan) loads deterministically.
+  if (window.SUBT && window.SUBT.whitelist) {
     window.SUBT.whitelist.forEach(t => {
       let serverType = topics[t.topicName];
       if (serverType && !subscriptions[t.topicName]) {
         initSubscribe({topicName: t.topicName, topicType: serverType});
       }
     });
+  }
+
+  // SubT lockdown: no topic browser -- stop here so the sidebar isn't built.
+  if (window.SUBT && window.SUBT.lockdown) {
     return;
   }
 

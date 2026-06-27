@@ -12,7 +12,7 @@ window.SUBT = {
 
   // true  = locked participant view (fixed whitelist, no topic browser, no close)
   // false = stock rosboard (browse/add/remove any topic)
-  lockdown: false,
+  lockdown: true,
 
   // Mouse joystick that publishes velocity commands via rosbridge.
   joystick: {
