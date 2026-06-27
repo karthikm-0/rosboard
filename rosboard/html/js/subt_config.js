@@ -28,7 +28,23 @@ window.SUBT = {
     rosbridgePortOffset: 210,
     rosbridgePortDefault: 9090,
   },
+
+  // Lidar (/registered_scan) view: lock to a top-down camera that follows the
+  // robot and keeps the robot's forward direction pointing up (FPS-aligned),
+  // instead of the default draggable oblique view that needs manual rotation.
+  // /registered_scan is in the map frame, so we need the robot pose to center
+  // and orient the view -- captured from orientTopic below.
+  lidarTopdown: {
+    enabled: true,
+    lidarTopic: "/registered_scan",   // ONLY this 3D view is locked top-down; others unaffected
+    orientTopic: "/state_estimation", // nav_msgs/msg/Odometry, robot pose in map frame
+    height: 30,                       // camera height above robot in metres; wheel still zooms
+  },
 };
+
+// Latest robot pose ({x,y,z,yaw}) captured from orientTopic; read by the lidar
+// top-down camera each frame. Null until the first odometry message arrives.
+window.SUBT.robotPose = null;
 
 window.SUBT.isWhitelisted = function (topicName) {
   return window.SUBT.whitelist.some(t => t.topicName === topicName);
@@ -38,6 +54,9 @@ window.SUBT.isWhitelisted = function (topicName) {
 if (window.SUBT.lockdown) {
   var subtStyle = document.createElement("style");
   subtStyle.textContent =
-    ".mdl-layout__drawer,.mdl-layout__drawer-button{display:none !important;}";
+    ".mdl-layout__drawer,.mdl-layout__drawer-button{display:none !important;}" +
+    // hide per-card controls (viewer-type switch, pause, close) so participants
+    // can't change or remove the fixed views.
+    ".card-buttons{display:none !important;}";
   document.head.appendChild(subtStyle);
 }

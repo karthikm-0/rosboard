@@ -22,6 +22,9 @@
         <!-- SubT customization: config must run before index.js (both defer = in order) -->
         <script type="text/javascript" src="js/subt_config.js" defer></script>
         <script type="text/javascript" src="js/index.js" defer></script>
+        <!-- top-down lidar view: patches Space3DViewer after index.js imports it,
+             keeping the upstream base class untouched -->
+        <script type="text/javascript" src="js/subt_topdown.js" defer></script>
         <!-- joystick publishes via rosbridge using roslibjs -->
         <script type="text/javascript" src="js/roslib.min.js"></script>
         <script type="text/javascript" src="js/subt_joystick.js" defer></script>

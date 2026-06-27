@@ -125,6 +125,18 @@ let onSystem = function(system) {
 }
 
 let onMsg = function(msg) {
+  // SubT: capture robot pose for the lidar top-down camera. This is a read-only
+  // use of odometry to orient the *view* only -- the data is never republished
+  // or re-framed. Not a visual topic, so consume it here and return.
+  if(window.SUBT && window.SUBT.lidarTopdown && msg._topic_name === window.SUBT.lidarTopdown.orientTopic) {
+    let pp = (msg.pose && msg.pose.pose) ? msg.pose.pose : null;
+    if(pp && pp.position && pp.orientation) {
+      let q = pp.orientation, pos = pp.position;
+      let yaw = Math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z));
+      window.SUBT.robotPose = {x: pos.x, y: pos.y, z: pos.z, yaw: yaw};
+    }
+    return;
+  }
   if(!subscriptions[msg._topic_name]) {
     console.log("Received unsolicited message", msg);
   } else if(!subscriptions[msg._topic_name].viewer) {
@@ -147,6 +159,15 @@ let onTopics = function(topics) {
         initSubscribe({topicName: t.topicName, topicType: serverType});
       }
     });
+  }
+
+  // SubT: read-only background subscription to the orient topic (no visible
+  // panel) so the lidar top-down camera can follow the robot's pose. Re-sent
+  // each topics tick so it survives a websocket reconnect. This is a plain ROS
+  // subscriber -- it never writes/republishes data.
+  if (window.SUBT && window.SUBT.lidarTopdown && window.SUBT.lidarTopdown.enabled && currentTransport) {
+    let ot = window.SUBT.lidarTopdown.orientTopic;
+    if (topics[ot]) currentTransport.subscribe({topicName: ot});
   }
 
   // SubT lockdown: no topic browser -- stop here so the sidebar isn't built.
