@@ -8,15 +8,26 @@
   if (!cfg.enabled) return;
 
   function init() {
-    // --- resolve rosbridge URL (different host port than rosboard) ---
+    // --- resolve rosbridge URL ---
+    // Behind an HTTPS tunnel/proxy, rosbridge is reverse-proxied under the same
+    // origin at cfg.rosbridgePath, so one public URL serves rosboard + rosbridge
+    // and wss:// is mandatory. For direct localhost/SSH use, fall back to the
+    // separate host port (rosboard 888i / rosbridge 909i via the +210 offset).
+    // ?rb= overrides: a full ws(s):// URL, or a bare port number (legacy).
     var params = new URLSearchParams(location.search);
-    var port = params.get("rb");
-    if (!port) {
-      port = location.port
-        ? (parseInt(location.port, 10) + (cfg.rosbridgePortOffset || 0))
-        : (cfg.rosbridgePortDefault || 9090);
+    var override = params.get("rb");
+    var url;
+    if (override && /^wss?:\/\//.test(override)) {
+      url = override;
+    } else if (location.protocol === "https:") {
+      url = "wss://" + location.host + (cfg.rosbridgePath || "/rosbridge");
+    } else {
+      var port = override
+        || (location.port
+              ? (parseInt(location.port, 10) + (cfg.rosbridgePortOffset || 0))
+              : (cfg.rosbridgePortDefault || 9090));
+      url = "ws://" + location.hostname + ":" + port;
     }
-    var url = "ws://" + location.hostname + ":" + port;
 
     // --- connection ---
     var ros = new ROSLIB.Ros({ url: url });

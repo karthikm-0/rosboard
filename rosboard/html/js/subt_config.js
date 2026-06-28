@@ -27,6 +27,10 @@ window.SUBT = {
     // i.e. a fixed +210 offset. Override in the URL with ?rb=<port> if needed.
     rosbridgePortOffset: 210,
     rosbridgePortDefault: 9090,
+    // Behind an HTTPS tunnel/proxy, rosbridge is reverse-proxied here on the same
+    // origin (see docker/web-sessions.sh). Used only when the page is served over
+    // https; localhost/SSH use still goes through the port offset above.
+    rosbridgePath: "/rosbridge",
   },
 
   // Lidar (/registered_scan) view: lock to a top-down camera that follows the
