@@ -44,6 +44,18 @@ window.SUBT = {
     orientTopic: "/state_estimation", // nav_msgs/msg/Odometry, robot pose in map frame
     height: 30,                       // camera height above robot in metres; wheel still zooms
   },
+
+  // "Next trial" button for online experiments. Publishes std_msgs/Empty to
+  // advanceTopic via rosbridge; the in-container shim (advance_to_stdin.py) turns
+  // each message into the Enter that steps run_config_sequence.py (MODE=online).
+  // Manual only -- no auto-advance. Disable for the plain streaming/test view.
+  experiment: {
+    enabled: true,
+    advanceTopic: "/experiment/advance",
+    label: "Next trial ▶",
+    rosbridgePath: "/rosbridge",      // same-origin wss path behind the tunnel
+    debounceMs: 800,                  // ignore repeat clicks within this window
+  },
 };
 
 // Latest robot pose ({x,y,z,yaw}) captured from orientTopic; read by the lidar
