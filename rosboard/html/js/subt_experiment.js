@@ -49,7 +49,8 @@
       background: "#3f51b5", border: "none", borderRadius: "8px", cursor: "pointer",
       boxShadow: "0 2px 6px rgba(0,0,0,0.5)", fontFamily: "sans-serif",
       userSelect: "none" });
-    btn.textContent = cfg.label || "Next trial ▶";
+    // First press starts trial 1; afterwards it advances to the next trial.
+    btn.textContent = cfg.startLabel || "Start ▶";
 
     var lbl = document.createElement("div");
     css(lbl, { position: "fixed", left: "24px", bottom: "70px", fontSize: "11px",
@@ -57,13 +58,34 @@
     function setLabel(t, c) { lbl.textContent = "experiment: " + t; lbl.style.color = c; }
     setLabel("connecting…", "#ffa726");
 
+    // run_config_sequence.py waits for TWO advances per trial: one to START the
+    // trial (unpause -> robot drives autonomously) and one to STOP it and prep the
+    // next. So a single "advance = next trial" click must send different pulse
+    // counts: the first press just STARTs trial 1 (1 pulse); every later press
+    // both STOPs the current trial and STARTs the next (2 pulses). stdin is
+    // buffered, so the START fires the instant the reset finishes.
+    function pulse() { advance.publish(new ROSLIB.Message({})); }   // std_msgs/Empty
+
+    var started = false;
     var debounceUntil = 0;
     btn.addEventListener("click", function () {
       if (!connected) return;
       var now = +new Date();
       if (now < debounceUntil) return;          // guard against double-steps
       debounceUntil = now + (cfg.debounceMs || 800);
-      advance.publish(new ROSLIB.Message({}));   // std_msgs/Empty
+
+      if (!started) {
+        started = true;
+        pulse();                                 // START trial 1
+        btn.textContent = cfg.label || "Next trial ▶";
+      } else {
+        pulse();                                 // STOP current trial
+        setTimeout(pulse, 120);                  // START next trial
+      }
+      // Re-arm the joystick to autonomous for the (re)started trial. (The joystick
+      // also re-arms itself off /experiment/advance; this is the instant path.)
+      if (typeof window.SUBT.setJoystickManual === "function")
+        window.SUBT.setJoystickManual(false);
       var orig = btn.style.background;
       btn.style.background = "#66bb6a";
       setTimeout(function () { btn.style.background = orig; }, 200);
