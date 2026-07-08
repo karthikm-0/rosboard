@@ -25,6 +25,8 @@
         <!-- top-down lidar view: patches Space3DViewer after index.js imports it,
              keeping the upstream base class untouched -->
         <script type="text/javascript" src="js/subt_topdown.js" defer></script>
+        <!-- compass mini-map overlay: renders from robotPose only, no ROS topics -->
+        <script type="text/javascript" src="js/subt_compass.js" defer></script>
         <!-- joystick + experiment "Next" button publish via rosbridge using roslibjs -->
         <script type="text/javascript" src="js/roslib.min.js"></script>
         <script type="text/javascript" src="js/subt_joystick.js" defer></script>

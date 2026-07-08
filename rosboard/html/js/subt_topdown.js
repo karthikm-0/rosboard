@@ -45,9 +45,16 @@
       this.gl.onmouse = function () {};
       this.gl.onmousewheel = function () {};
 
-      // Top-down follow camera: directly above the robot looking straight down,
-      // with the robot's forward direction as screen-up (forward = up). No axis
-      // is flipped -- robot-right maps to screen-right.
+      // Top-down follow camera: directly above the robot looking straight down.
+      // Orientation is WORLD-FIXED by default (map north-up: world +x = screen
+      // right, world +y = screen up) -- the map does not spin as the robot turns,
+      // it only pans to keep the robot centered. Set lidarTopdown.followYaw = true
+      // to instead lock the robot's forward direction to screen-up (FPS style).
+      var followYaw = !!(window.SUBT.lidarTopdown && window.SUBT.lidarTopdown.followYaw);
+      // World-fixed screen orientation, rotated to match RViz. 0 = world +y up;
+      // 90 = world +x up (RViz/compass x-up convention). Try 90 / -90 / 180 if the
+      // map comes out rotated the wrong way. Ignored in followYaw mode.
+      var rot = ((window.SUBT.lidarTopdown && window.SUBT.lidarTopdown.viewRotationDeg) || 0) * DEG2RAD;
       this.updatePerspective = function () {
         var p = pose();
         that.cam_pos[0] = p.x;
@@ -55,8 +62,10 @@
         that.cam_pos[2] = p.z + that.cam_r;
         mat4.perspective(that.proj, 45 * DEG2RAD,
           that.gl.canvas.width / that.gl.canvas.height, 0.1, 1000);
-        mat4.lookAt(that.view, that.cam_pos, [p.x, p.y, p.z],
-          [Math.cos(p.yaw), Math.sin(p.yaw), 0]);
+        var up = followYaw
+          ? [Math.cos(p.yaw), Math.sin(p.yaw), 0]
+          : [Math.sin(rot), Math.cos(rot), 0];
+        mat4.lookAt(that.view, that.cam_pos, [p.x, p.y, p.z], up);
         mat4.multiply(that.mvp, that.proj, that.view);
       };
 
@@ -97,8 +106,9 @@
       }
       var grid = GL.Mesh.load({ vertices: gv, colors: gc }, null, null, this.gl);
 
-      // Body axes at the robot: red = forward (always up on screen), green =
-      // left, blue = up. Red is the "which way am I facing" indicator.
+      // Body axes at the robot: red = forward, green = left, blue = up. In the
+      // world-fixed view the red arrow rotates with the robot to show heading
+      // (like a compass needle on a map); in followYaw mode it points up.
       var L = 2.5, az = 0.15;
       var fx = Math.cos(p.yaw), fy = Math.sin(p.yaw);
       var lx = -Math.sin(p.yaw), ly = Math.cos(p.yaw);

@@ -73,6 +73,33 @@ window.SUBT = {
     lidarTopic: "/registered_scan",   // ONLY this 3D view is locked top-down; others unaffected
     orientTopic: "/state_estimation", // nav_msgs/msg/Odometry, robot pose in map frame
     height: 30,                       // camera height above robot in metres; wheel still zooms
+    // false (default) = WORLD-fixed orientation (north-up map that only pans to
+    //                   keep the robot centered -- does not spin as it turns).
+    // true            = FPS: robot forward is always screen-up (view rotates).
+    followYaw: false,
+    // Rotate the world-fixed view to match RViz. 0 = world +y up; 90 = world +x
+    // up (RViz/compass x-up convention). Change to -90/180 if it comes out flipped.
+    viewRotationDeg: 90,
+  },
+
+  // Compass mini-map OVERLAID on the top-left of the camera view (mirrors the
+  // visuals of compass_graphic_node.py). No ROS topics -- renders purely from
+  // robotPose (captured by index.js). Optional goal/takeover markers below.
+  compass: {
+    enabled: true,
+    // true (default) = robot-centric: robot faces up, markers rotate into the
+    //                  robot frame -- matches the FPS camera it sits on.
+    // false          = world/north-up map.
+    robotCentric: true,
+    rangeM: 10,      // ring radius in metres
+    sizePx: 160,     // on-screen diameter of the overlay
+    cameraTopic: "/X1/front/image_raw",  // card to overlay (defaults to the whitelisted Image)
+    // Goal/takeover markers (map-frame x,y), taken from the trial's config in
+    // exp1_configs_ub24.yaml -- NOT from a ROS topic. Set to null to hide.
+    // These are the config_1 values; update them to match the trial you run
+    // (or set window.SUBT.compassGoal / compassTakeover at runtime for stepping).
+    goal: { x: 0.0, y: 5.0 },
+    takeover: { x: 0.0, y: 0.0 },
   },
 
   // "Next trial" button for online experiments. Publishes std_msgs/Empty to
