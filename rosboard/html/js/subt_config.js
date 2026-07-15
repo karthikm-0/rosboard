@@ -94,12 +94,12 @@ window.SUBT = {
     rangeM: 10,      // ring radius in metres
     sizePx: 160,     // on-screen diameter of the overlay
     cameraTopic: "/X1/front/image_raw",  // card to overlay (defaults to the whitelisted Image)
-    // Goal/takeover markers (map-frame x,y), taken from the trial's config in
-    // exp1_configs_ub24.yaml -- NOT from a ROS topic. Set to null to hide.
-    // These are the config_1 values; update them to match the trial you run
-    // (or set window.SUBT.compassGoal / compassTakeover at runtime for stepping).
-    goal: { x: 0.0, y: 5.0 },
-    takeover: { x: 0.0, y: 0.0 },
+    // Goal/takeover markers come from window.SUBT.compassGoal / compassTakeover,
+    // set per-trial by subt_experiment.js when it fetches broker /trial-info.
+    // No fallback here -- if we don't know the current trial's geometry the
+    // compass simply omits the markers (renders robot + heading only).
+    goal: null,
+    takeover: null,
   },
 
   // "Next trial" button for online experiments. Publishes std_msgs/Empty to
@@ -109,11 +109,18 @@ window.SUBT = {
   experiment: {
     enabled: true,
     advanceTopic: "/experiment/advance",
-    // The runner (run_config_sequence.py) waits for two advances per trial: START
-    // then STOP. So the first press only STARTs trial 1 (label below), and every
-    // later press advances to the next trial by sending STOP+START (2 pulses).
+    // Button label / behavior progresses across the sequence:
+    //   press 1              -> startLabel  ("Start ▶")       : STARTs trial 1
+    //   press 2..totalTrials -> label       ("Next trial ▶")  : STOP+START
+    //   press totalTrials+1  -> finishLabel ("Finish study ✓"): STOP + /release
+    // totalTrials + broker URL are normally injected by the broker via URL query
+    // (?total=&broker=); the values below are fallbacks for local testing (0 =
+    // Finish path never engages, button acts as "Next trial" forever).
     startLabel: "Start ▶",
     label: "Next trial ▶",
+    finishLabel: "Finish study ✓",
+    totalTrials: 0,
+    brokerUrl: "",
     rosbridgePath: "/rosbridge",      // same-origin wss path behind the tunnel
     debounceMs: 800,                  // ignore repeat clicks within this window
   },

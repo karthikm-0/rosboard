@@ -103,12 +103,12 @@
     function updateModeUI() {
       if (!useJoy) return;
       if (manual) {
-        modeLbl.textContent = "MANUAL — you are driving";
+        modeLbl.textContent = "MANUAL";
         modeLbl.style.color = "#66bb6a";
         base.style.opacity = "1"; knob.style.background = "#3f51b5";
         knob.style.cursor = "grab";
       } else {
-        modeLbl.textContent = "AUTONOMOUS\nmove the stick to take over";
+        modeLbl.textContent = "AUTONOMOUS";
         modeLbl.style.whiteSpace = "pre";
         modeLbl.style.color = "#ffa726";
         base.style.opacity = "0.55"; knob.style.background = "#3f51b5";
