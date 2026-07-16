@@ -78,7 +78,7 @@
     // --- UI ---
     var btn = document.createElement("button");
     btn.id = "subt-next-btn";
-    css(btn, { position: "fixed", left: "24px", bottom: "24px", zIndex: 99999,
+    css(btn, { position: "fixed", right: "24px", bottom: "24px", zIndex: 99999,
       padding: "14px 22px", fontSize: "16px", fontWeight: "bold", color: "#fff",
       background: "#3f51b5", border: "none", borderRadius: "8px", cursor: "pointer",
       boxShadow: "0 2px 6px rgba(0,0,0,0.5)", fontFamily: "sans-serif",
@@ -92,7 +92,7 @@
     btn.style.cursor = "not-allowed";
 
     var lbl = document.createElement("div");
-    css(lbl, { position: "fixed", left: "24px", bottom: "70px", fontSize: "11px",
+    css(lbl, { position: "fixed", right: "24px", bottom: "70px", fontSize: "11px",
       color: "#ffa726", fontFamily: "sans-serif", zIndex: 99999 });
     function setLabel(t, c) { lbl.textContent = "experiment: " + t; lbl.style.color = c; }
     setLabel("connecting…", "#ffa726");

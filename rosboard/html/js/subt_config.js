@@ -112,6 +112,18 @@ window.SUBT = {
     takeover: null,
   },
 
+  // Fixed-ratio widths for camera + lidar cards. Percentages of viewport width
+  // (vw), so widgets scale with browser size but stay in a consistent 33/33
+  // layout across monitors. minCardPx clamps on small screens.
+  layout: {
+    enabled: true,
+    cameraTopic: "/X1/front/image_raw",
+    lidarTopic: "/X1/points_preview",
+    cameraVw: 33,
+    lidarVw: 33,
+    minCardPx: 320,
+  },
+
   // "Next trial" button for online experiments. Publishes std_msgs/Empty to
   // advanceTopic via rosbridge; the in-container shim (advance_to_stdin.py) turns
   // each message into the Enter that steps run_config_sequence.py (MODE=online).

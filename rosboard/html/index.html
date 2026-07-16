@@ -23,6 +23,8 @@
         <!-- SubT customization: config must run before index.js (both defer = in order) -->
         <script type="text/javascript" src="js/subt_config.js" defer></script>
         <script type="text/javascript" src="js/index.js" defer></script>
+        <!-- fixed-ratio card widths for camera+lidar; tags cards with data-topic -->
+        <script type="text/javascript" src="js/subt_layout.js" defer></script>
         <!-- top-down lidar view: patches Space3DViewer after index.js imports it,
              keeping the upstream base class untouched -->
         <script type="text/javascript" src="js/subt_topdown.js" defer></script>

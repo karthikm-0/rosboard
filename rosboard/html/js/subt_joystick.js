@@ -71,8 +71,9 @@
     // --- UI ---
     var wrap = document.createElement("div");
     wrap.id = "subt-joystick";
-    css(wrap, { position: "fixed", right: "24px", bottom: "24px", width: "170px",
-      height: "212px", zIndex: 99999, userSelect: "none", touchAction: "none",
+    css(wrap, { position: "fixed", left: "50%", bottom: "24px", width: "170px",
+      height: "212px", transform: "translateX(-50%)",
+      zIndex: 99999, userSelect: "none", touchAction: "none",
       fontFamily: "sans-serif" });
     var label = document.createElement("div");
     css(label, { position: "absolute", top: "0", width: "100%", textAlign: "center",
