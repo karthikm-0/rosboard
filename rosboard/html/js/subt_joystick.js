@@ -167,6 +167,9 @@
 
     setInterval(function () {
       if (!connected) return;
+      // Duplicate-tab guard: newer tab of the same session stays silent so it
+      // doesn't fight the primary tab's /joy stream (see subt_duplicate_guard.js).
+      if (window.SUBT && window.SUBT.duplicateTab) return;
       if (useJoy) {
         var axes = new Array(nAxes).fill(0);
         axes[modeAxis]  = manual ? 1.0 : -1.0;             // released vs held

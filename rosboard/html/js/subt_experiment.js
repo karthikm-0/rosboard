@@ -171,6 +171,8 @@
     var debounceUntil = 0;
     btn.addEventListener("click", function () {
       if (!connected) return;
+      // Duplicate-tab guard: only the primary tab can advance the runner.
+      if (window.SUBT && window.SUBT.duplicateTab) return;
       var now = +new Date();
       if (now < debounceUntil) return;          // guard against double-steps
       debounceUntil = now + (cfg.debounceMs || 800);

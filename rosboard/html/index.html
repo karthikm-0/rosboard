@@ -22,6 +22,8 @@
 	      <script type="text/javascript" src="js/litegl.min.js"></script>
         <!-- SubT customization: config must run before index.js (both defer = in order) -->
         <script type="text/javascript" src="js/subt_config.js" defer></script>
+        <!-- same-browser duplicate-tab guard: sets window.SUBT.duplicateTab -->
+        <script type="text/javascript" src="js/subt_duplicate_guard.js" defer></script>
         <script type="text/javascript" src="js/index.js" defer></script>
         <!-- fixed-ratio card widths for camera+lidar; tags cards with data-topic -->
         <script type="text/javascript" src="js/subt_layout.js" defer></script>
