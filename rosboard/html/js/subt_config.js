@@ -6,8 +6,14 @@ window.SUBT = {
   // Only these topics are shown. With lockdown on, the topic sidebar is hidden
   // and any attempt to subscribe to anything else is blocked.
   whitelist: [
+    // Camera temporarily disabled to isolate rosboard's throughput -- was
+    // ~74 MB/s raw feeding rosboard's Python compressor. Re-enable after
+    // shrinking source resolution in subt_gz/models/x1/model.sdf.
     { topicName: "/X1/front/image_raw", topicType: "sensor_msgs/msg/Image" },
-    { topicName: "/registered_scan", topicType: "sensor_msgs/msg/PointCloud2" },
+    // Use the decimated preview cloud (row_stride=2, col_stride=4 = 8x fewer
+    // points) instead of the raw /registered_scan. aede_registered_scan_bridge
+    // publishes it when publish_lidar_preview:=true in x1_world.launch.py.
+    { topicName: "/X1/points_preview", topicType: "sensor_msgs/msg/PointCloud2" },
   ],
 
   // true  = locked participant view (fixed whitelist, no topic browser, no close)
@@ -70,7 +76,11 @@ window.SUBT = {
   // and orient the view -- captured from orientTopic below.
   lidarTopdown: {
     enabled: true,
-    lidarTopic: "/registered_scan",   // ONLY this 3D view is locked top-down; others unaffected
+    // /X1/points_preview -- decimated (8x lighter) map-frame cloud published
+    // by aede_registered_scan_bridge when publish_lidar_preview:=true. Same
+    // frame as /registered_scan, so the top-down camera math below is unchanged;
+    // any other map-frame PointCloud2 topic could be substituted here.
+    lidarTopic: "/X1/points_preview",
     orientTopic: "/state_estimation", // nav_msgs/msg/Odometry, robot pose in map frame
     height: 30,                       // camera height above robot in metres; wheel still zooms
     // false (default) = WORLD-fixed orientation (north-up map that only pans to

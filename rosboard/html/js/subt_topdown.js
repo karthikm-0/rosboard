@@ -79,9 +79,11 @@
       this.updatePerspective();
     };
 
-    // --- draw: for the locked view, swap the stock static grid + origin axes
-    //     for a world-aligned grid that follows the robot, plus body axes at the
-    //     robot (red = forward) as the heading indicator.
+    // --- draw: for the locked view, strip the stock static grid + origin axes
+    //     and draw body axes at the robot (red = forward) as the heading
+    //     indicator. The world-aligned grid is opt-in via
+    //     lidarTopdown.showGrid; default off since the point cloud itself
+    //     provides plenty of motion cue.
     var origDraw = Space3DViewer.prototype.draw;
     Space3DViewer.prototype.draw = function (drawObjects) {
       origDraw.call(this, drawObjects);
@@ -90,21 +92,7 @@
       var self = this;
       var p = pose();
       var i;
-
-      // World-aligned grid (1 m) covering the visible area around the robot.
-      // Lines sit at integer world coords, so they scroll past as the robot
-      // moves -- the grid follows but still gives a motion cue.
-      var R = Math.max(8, Math.round(this.cam_r * 0.5));
-      var cx = Math.round(p.x), cy = Math.round(p.y), gz = 0, gv = [], gc = [];
-      for (var x = cx - R; x <= cx + R; x++) {
-        gv.push(x, cy - R, gz, x, cy + R, gz);
-        for (i = 0; i < 8; i++) gc.push(0.5);
-      }
-      for (var y = cy - R; y <= cy + R; y++) {
-        gv.push(cx - R, y, gz, cx + R, y, gz);
-        for (i = 0; i < 8; i++) gc.push(0.5);
-      }
-      var grid = GL.Mesh.load({ vertices: gv, colors: gc }, null, null, this.gl);
+      var showGrid = !!(window.SUBT.lidarTopdown && window.SUBT.lidarTopdown.showGrid);
 
       // Body axes at the robot: red = forward, green = left, blue = up. In the
       // world-fixed view the red arrow rotates with the robot to show heading
@@ -124,12 +112,26 @@
       ];
       var axes = GL.Mesh.load({ vertices: av, colors: ac }, null, null, this.gl);
 
-      // Drop the stock static grid + axes (matched by reference) and use the
-      // following grid; draw the body axes on top of the points.
+      // Drop the stock static grid + axes (matched by reference).
       this.drawObjectsGl = this.drawObjectsGl.filter(function (o) {
         return o.mesh !== self.gridMesh && o.mesh !== self.axesMesh;
       });
-      this.drawObjectsGl.unshift({ type: "lines", mesh: grid });
+      if (showGrid) {
+        // Optional world-aligned grid (1 m) around the robot -- lines sit at
+        // integer world coords so they scroll past as the robot moves.
+        var R = Math.max(8, Math.round(this.cam_r * 0.5));
+        var cx = Math.round(p.x), cy = Math.round(p.y), gz = 0, gv = [], gc = [];
+        for (var x = cx - R; x <= cx + R; x++) {
+          gv.push(x, cy - R, gz, x, cy + R, gz);
+          for (i = 0; i < 8; i++) gc.push(0.5);
+        }
+        for (var y = cy - R; y <= cy + R; y++) {
+          gv.push(cx - R, y, gz, cx + R, y, gz);
+          for (i = 0; i < 8; i++) gc.push(0.5);
+        }
+        var grid = GL.Mesh.load({ vertices: gv, colors: gc }, null, null, this.gl);
+        this.drawObjectsGl.unshift({ type: "lines", mesh: grid });
+      }
       this.drawObjectsGl.push({ type: "lines", mesh: axes });
     };
 

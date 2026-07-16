@@ -36,7 +36,7 @@
   function toPx(px, py, rp) {
     var dx = px - rp.x, dy = py - rp.y, xr, yr;
     if (robotCentric) {
-      xr =  dx * Math.cos(rp.yaw) + dy * Math.sin(rp.yaw);   // forward
+      xr = dx * Math.cos(rp.yaw) + dy * Math.sin(rp.yaw);   // forward
       yr = -dx * Math.sin(rp.yaw) + dy * Math.cos(rp.yaw);   // left
     } else { xr = dx; yr = dy; }
     var dist = Math.hypot(xr, yr), th = Math.atan2(yr, xr);
@@ -74,7 +74,7 @@
 
         var g = window.SUBT.compassGoal || cfg.goal;
         var t = window.SUBT.compassTakeover || cfg.takeover;
-        if (g) { var gp = toPx(g.x, g.y, rp); dot(ctx, gp[0], gp[1], 5, "#ffd600"); }
+        if (g) { var gp = toPx(g.x, g.y, rp); dot(ctx, gp[0], gp[1], 5, "#00ffff"); }
         if (t) { var tp = toPx(t.x, t.y, rp); dot(ctx, tp[0], tp[1], 5, "#ff5252"); }
       }
       requestAnimationFrame(render);
