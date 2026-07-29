@@ -16,9 +16,13 @@
   if (!cfg.enabled) return;
 
   var RANGE = cfg.rangeM || 10;
+  // Intrinsic canvas resolution (drawing surface). CSS below scales the
+  // display to a fraction of the parent card so the compass tracks the camera
+  // view size instead of fixed pixels.
   var S = cfg.sizePx || 160;
   var C = S / 2, RAD = S / 2 - 8, SCALE = RAD / RANGE;
   var robotCentric = cfg.robotCentric !== false;
+  var pctOfCard = cfg.percentOfCard || 20;   // % of parent card width
 
   // Which card to overlay: the whitelisted Image topic (or an explicit override).
   function cameraTopic() {
@@ -54,7 +58,11 @@
   function makeCanvas() {
     var cv = document.createElement("canvas");
     cv.width = S; cv.height = S;
+    // Display size scales with the parent card (percentOfCard %); keep the
+    // aspect square so the compass ring stays circular. Intrinsic canvas
+    // resolution stays S x S, browser scales for display -- crisp at any size.
     cv.style.cssText = "position:absolute;top:8px;left:8px;z-index:20;" +
+      "width:" + pctOfCard + "%;height:auto;aspect-ratio:1/1;" +
       "background:rgba(20,20,20,0.45);border-radius:50%;pointer-events:none;";
     var ctx = cv.getContext("2d");
     (function render() {

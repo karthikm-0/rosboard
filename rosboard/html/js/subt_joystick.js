@@ -71,8 +71,12 @@
     // --- UI ---
     var wrap = document.createElement("div");
     wrap.id = "subt-joystick";
-    css(wrap, { position: "fixed", left: "50%", bottom: "24px", width: "170px",
-      height: "212px", transform: "translateX(-50%)",
+    // Center horizontally using left:0/right:0 + auto margins -- this respects
+    // the vertical scrollbar so the joystick lands on the SAME center axis as
+    // the flex-centered .grid above (transform:translateX centers on the
+    // scrollbar-inclusive viewport, which drifts a few pixels off the cards).
+    css(wrap, { position: "fixed", left: "0", right: "0", bottom: "24px",
+      width: "170px", height: "212px", margin: "0 auto",
       zIndex: 99999, userSelect: "none", touchAction: "none",
       fontFamily: "sans-serif" });
     var label = document.createElement("div");

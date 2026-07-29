@@ -49,10 +49,62 @@
     '.card[data-topic="' + camTopic + '"]{' +
       'width:calc(' + camVw + 'vw - 40pt) !important;' +
       'min-width:' + minPx + 'px !important;' +
+      'aspect-ratio:4/3;' +           // matches camera image ratio
     '}' +
     '.card[data-topic="' + lidTopic + '"]{' +
       'width:calc(' + lidVw + 'vw - 40pt) !important;' +
       'min-width:' + minPx + 'px !important;' +
+      'aspect-ratio:4/3;' +           // same shape so both cards match height
+    '}' +
+    // Stretch the lidar canvas to fill its card (Space3DViewer defaults to a
+    // fixed square canvas; without stretch it leaves whitespace inside a wider
+    // card and looks shorter).
+    '.card[data-topic="' + lidTopic + '"] canvas{' +
+      'width:100% !important; height:100% !important; display:block;' +
+    '}' +
+    // Hide the "ROSboard: <hostname>" label in the top bar -- irrelevant to the
+    // participant. Override with cfg.showTitle: true to bring it back.
+    (cfg.showTitle ? '' : '.mdl-layout-title{visibility:hidden !important;}') +
+    // Hide the per-card topic-name row. Participants don't need "/X1/front/image_raw"
+    // above their video. Override with cfg.showCardTitles: true to keep them.
+    (cfg.showCardTitles ? '' : '.card-title{display:none !important;}') +
+    // Center-align the card grid using flexbox instead of masonry's flush-left
+    // layout. Cards flow left-to-right and wrap; whole row is centered so the
+    // camera+lidar pair sits in the middle of the viewport regardless of screen
+    // size. Overrides masonry's absolute positioning (which is disabled below).
+    '.grid{' +
+      'display:flex !important;' +
+      'flex-wrap:wrap;' +
+      'justify-content:center;' +
+      'align-items:flex-start;' +
+      'gap:20pt;' +
+      'margin:20pt auto !important;' +
+      'padding:0 !important;' +
+    '}' +
+    '.card{' +
+      'position:relative !important;' +
+      'left:auto !important; top:auto !important;' +
+      'margin:0 !important;' +
     '}';
   document.head.appendChild(style);
+
+  // Rosboard initializes masonry on .grid at DOMContentLoaded; masonry
+  // absolutely-positions each card, which fights our flexbox centering.
+  // Wait briefly for masonry to attach, then destroy it so the browser lays
+  // the cards out with our CSS flex rules instead.
+  function killMasonry() {
+    if (typeof $ === "undefined") return false;
+    var g = $(".grid");
+    if (!g.length) return false;
+    var inst = g.data("masonry");
+    if (!inst) return false;
+    g.masonry("destroy");
+    return true;
+  }
+  if (!killMasonry()) {
+    var m = 0;
+    var mv = setInterval(function () {
+      if (killMasonry() || ++m > 100) clearInterval(mv);
+    }, 50);
+  }
 })();

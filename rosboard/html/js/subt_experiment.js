@@ -97,6 +97,27 @@
     function setLabel(t, c) { lbl.textContent = "experiment: " + t; lbl.style.color = c; }
     setLabel("connecting…", "#ffa726");
 
+    // Trial counter, top-right. "Trial N / total" once the participant has
+    // started. Before Start: shows "Ready" so they know something's coming.
+    var trialLbl = document.createElement("div");
+    css(trialLbl, { position: "fixed", top: "16px", right: "16px", zIndex: 99999,
+      padding: "8px 14px", fontSize: "14px", fontWeight: "bold",
+      color: "#fff", background: "rgba(0,0,0,0.6)", borderRadius: "6px",
+      fontFamily: "sans-serif", userSelect: "none" });
+    document.body.appendChild(trialLbl);
+    function setTrialLabel(n) {
+      if (n <= 0) {
+        trialLbl.textContent = total > 0 ? "Ready · " + total + " trials" : "Ready";
+      } else if (total > 0 && n > total) {
+        trialLbl.textContent = "Study complete";
+      } else if (total > 0) {
+        trialLbl.textContent = "Trial " + n + " / " + total;
+      } else {
+        trialLbl.textContent = "Trial " + n;
+      }
+    }
+    setTrialLabel(0);
+
     // run_config_sequence.py waits for TWO advances per trial: one to START the
     // trial (unpause -> robot drives autonomously) and one to STOP it and prep
     // the next. So the button sends different pulse counts depending on where
@@ -183,6 +204,7 @@
       } else if (total > 0 && pressCount > total) {
         pulse();                                 // STOP last trial
         btn.disabled = true;
+        setTrialLabel(pressCount);
         finishAndRelease();
         return;
       } else {
@@ -192,6 +214,7 @@
       }
 
       btn.textContent = labelForCount(pressCount);
+      setTrialLabel(pressCount);
       // Re-arm the joystick to autonomous for the (re)started trial. (The joystick
       // also re-arms itself off /experiment/advance; this is the instant path.)
       if (typeof window.SUBT.setJoystickManual === "function")
