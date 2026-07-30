@@ -56,6 +56,7 @@
             simReady = true;
             setLabel("ready", "#66bb6a");
             btn.disabled = false; btn.style.opacity = "1"; btn.style.cursor = "pointer";
+            hideOverlay();
             clearInterval(readyPoll); readyPoll = null;
           }
         }, function () { /* rosapi call failed; keep polling */ });
@@ -72,6 +73,7 @@
       if (readyPoll) { clearInterval(readyPoll); readyPoll = null; }
       btn.disabled = true; btn.style.opacity = "0.5"; btn.style.cursor = "not-allowed";
       setLabel("reconnecting…", "#ffa726");
+      showOverlay("Reconnecting to simulation…");
       setTimeout(function () { ros.connect(url); }, 2000);
     });
 
@@ -117,6 +119,29 @@
       }
     }
     setTrialLabel(0);
+
+    // Loading overlay -- covers the sensor cards during the initial sim boot
+    // and briefly at each trial transition. Without this, participants see
+    // stale frames after clicking Next (the runner needs ~1-2s to reset the
+    // robot to the next spawn) and mash the button thinking nothing happened.
+    var overlay = document.createElement("div");
+    css(overlay, { position: "fixed", inset: "0", zIndex: "999998",
+      background: "rgba(0,0,0,0.92)", color: "#fff",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "sans-serif" });
+    var overlayTitle = document.createElement("div");
+    css(overlayTitle, { fontSize: "28px", fontWeight: "bold", marginBottom: "16px" });
+    var overlaySub = document.createElement("div");
+    css(overlaySub, { fontSize: "14px", color: "#ffa726" });
+    overlaySub.textContent = "Please wait — do not close this tab";
+    overlay.appendChild(overlayTitle);
+    overlay.appendChild(overlaySub);
+    document.body.appendChild(overlay);
+    function showOverlay(title) { overlayTitle.textContent = title; overlay.style.display = "flex"; }
+    function hideOverlay() { overlay.style.display = "none"; }
+    showOverlay("Preparing simulation…");
+    var transitionMs = cfg.transitionOverlayMs || 4000;
 
     // run_config_sequence.py waits for TWO advances per trial: one to START the
     // trial (unpause -> robot drives autonomously) and one to STOP it and prep
@@ -212,6 +237,12 @@
         setTimeout(pulse, 120);                  // START next trial
         refreshCompassForTrial(pressCount);      // markers for the incoming trial
       }
+
+      // Cover the sensors while the runner resets the robot to the next spawn
+      // (~1-2s). Fixed timeout is more reliable than watching for a pose jump
+      // and guarantees the overlay clears even if odometry is briefly quiet.
+      showOverlay("Loading trial " + pressCount + "…");
+      setTimeout(hideOverlay, transitionMs);
 
       btn.textContent = labelForCount(pressCount);
       setTrialLabel(pressCount);
