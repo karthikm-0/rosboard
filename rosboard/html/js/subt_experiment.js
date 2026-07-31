@@ -44,23 +44,57 @@
       ros: ros, name: "/rosapi/subscribers",
       serviceType: "rosapi_msgs/srv/Subscribers",
     });
+    // Readiness = TWO signals both true:
+    //  (a) /experiment/advance has a subscriber -- advance_to_stdin.py is up,
+    //      so a START pulse won't be dropped.
+    //  (b) EVERY whitelisted sensor topic has a publisher -- Gazebo bridges
+    //      have launched, so once the runner unpauses there's real data to
+    //      display. Without (b), clicking Start too early means an empty sensor
+    //      view for several seconds while the sim finishes booting.
+    var pubsClient = new ROSLIB.Service({
+      ros: ros, name: "/rosapi/publishers",
+      serviceType: "rosapi_msgs/srv/Publishers",
+    });
+    var whitelist = (window.SUBT && window.SUBT.whitelist) || [];
     var readyPoll = null;
     function beginReadinessPolling() {
       if (readyPoll) return;
-      var req = new ROSLIB.ServiceRequest({ topic: cfg.advanceTopic || "/experiment/advance" });
+      var advReq = new ROSLIB.ServiceRequest({
+        topic: cfg.advanceTopic || "/experiment/advance"
+      });
       readyPoll = setInterval(function () {
-        if (!connected) return;
-        subsClient.callService(req, function (res) {
+        if (!connected || simReady) return;
+        // (a) advance subscriber check
+        subsClient.callService(advReq, function (res) {
           var subs = (res && res.subscribers) || [];
-          if (subs.length > 0 && !simReady) {
-            simReady = true;
-            setLabel("ready", "#66bb6a");
-            btn.disabled = false; btn.style.opacity = "1"; btn.style.cursor = "pointer";
-            hideOverlay();
-            clearInterval(readyPoll); readyPoll = null;
-          }
+          if (subs.length === 0) return;
+          // (b) publisher check on every whitelisted topic
+          var pending = whitelist.length, allPresent = true;
+          if (pending === 0) return markReady();
+          whitelist.forEach(function (t) {
+            pubsClient.callService(
+              new ROSLIB.ServiceRequest({ topic: t.topicName }),
+              function (r) {
+                if (!((r && r.publishers) || []).length) allPresent = false;
+                if (--pending === 0 && allPresent) markReady();
+              },
+              function () { allPresent = false; if (--pending === 0) {} }
+            );
+          });
         }, function () { /* rosapi call failed; keep polling */ });
       }, 500);
+    }
+    function markReady() {
+      if (simReady) return;
+      simReady = true;
+      setLabel("ready", "#66bb6a");
+      btn.disabled = false; btn.style.opacity = "1"; btn.style.cursor = "pointer";
+      // Overlay stays UP -- swap text to "Ready, click Start". Only the
+      // Start-click hides it (with a short buffer so the first sensor frames
+      // land before the participant sees the cards).
+      showOverlay("Ready");
+      overlaySub.textContent = "Click Start ▶ in the bottom-right when you're ready to begin.";
+      clearInterval(readyPoll); readyPoll = null;
     }
     ros.on("connection", function () {
       connected = true;
@@ -80,7 +114,9 @@
     // --- UI ---
     var btn = document.createElement("button");
     btn.id = "subt-next-btn";
-    css(btn, { position: "fixed", right: "24px", bottom: "24px", zIndex: 99999,
+    // z-index above the loading overlay (999998) so the corner button remains
+    // clickable while the "Ready — click Start" overlay is up.
+    css(btn, { position: "fixed", right: "24px", bottom: "24px", zIndex: 999999,
       padding: "14px 22px", fontSize: "16px", fontWeight: "bold", color: "#fff",
       background: "#3f51b5", border: "none", borderRadius: "8px", cursor: "pointer",
       boxShadow: "0 2px 6px rgba(0,0,0,0.5)", fontFamily: "sans-serif",
@@ -142,6 +178,35 @@
     function hideOverlay() { overlay.style.display = "none"; }
     showOverlay("Preparing simulation…");
     var transitionMs = cfg.transitionOverlayMs || 4000;
+
+    // Wait for the first message on every whitelisted sensor topic, then run
+    // `done`. If it takes longer than safetyMs (sim slow, DDS glitch, plugin
+    // stalled), fall back to hiding the overlay anyway so we don't strand the
+    // participant behind it. Fires done() exactly once.
+    // Rides on the experiment's own rosbridge connection (separate from
+    // rosboard's), so subscriptions here don't affect the sensor cards.
+    function waitForFirstFrames(safetyMs, done) {
+      var wl = (window.SUBT && window.SUBT.whitelist) || [];
+      if (!wl.length || !connected) { setTimeout(done, safetyMs); return; }
+      var remaining = wl.length, called = false;
+      function finish() { if (called) return; called = true; done(); }
+      var subs = [];
+      var timer = setTimeout(function () {
+        subs.forEach(function (s) { try { s.unsubscribe(); } catch (e) {} });
+        finish();
+      }, safetyMs);
+      wl.forEach(function (t) {
+        var sub = new ROSLIB.Topic({
+          ros: ros, name: t.topicName, messageType: t.topicType,
+          throttle_rate: 500,       // rate-limit; we only need ONE frame each
+        });
+        subs.push(sub);
+        sub.subscribe(function () {
+          try { sub.unsubscribe(); } catch (e) {}
+          if (--remaining === 0) { clearTimeout(timer); finish(); }
+        });
+      });
+    }
 
     // run_config_sequence.py waits for TWO advances per trial: one to START the
     // trial (unpause -> robot drives autonomously) and one to STOP it and prep
@@ -224,8 +289,18 @@
       debounceUntil = now + (cfg.debounceMs || 800);
       pressCount++;
 
+      // Safety timeout for waitForFirstFrames -- 3x the fixed transition
+      // window. If sensors don't publish by then, we hide the overlay anyway.
+      var safetyMs = Math.max(transitionMs * 3, 15000);
+
       if (pressCount === 1) {
         pulse();                                 // START trial 1
+        // First press: overlay was showing "Ready" -- swap to "Starting trial 1…"
+        // and keep it up until the first camera/lidar frame ACTUALLY arrives, so
+        // the participant never sees stale "waiting for data" cards.
+        showOverlay("Starting trial 1…");
+        overlaySub.textContent = "Please wait — do not close this tab";
+        waitForFirstFrames(safetyMs, hideOverlay);
       } else if (total > 0 && pressCount > total) {
         pulse();                                 // STOP last trial
         btn.disabled = true;
@@ -236,13 +311,12 @@
         pulse();                                 // STOP current trial
         setTimeout(pulse, 120);                  // START next trial
         refreshCompassForTrial(pressCount);      // markers for the incoming trial
+        // Cover the sensors during the trial-reset gap; lift the moment the
+        // next trial's first frames land (or after the safety timeout).
+        showOverlay("Loading trial " + pressCount + "…");
+        overlaySub.textContent = "Please wait — do not close this tab";
+        waitForFirstFrames(safetyMs, hideOverlay);
       }
-
-      // Cover the sensors while the runner resets the robot to the next spawn
-      // (~1-2s). Fixed timeout is more reliable than watching for a pose jump
-      // and guarantees the overlay clears even if odometry is briefly quiet.
-      showOverlay("Loading trial " + pressCount + "…");
-      setTimeout(hideOverlay, transitionMs);
 
       btn.textContent = labelForCount(pressCount);
       setTrialLabel(pressCount);
