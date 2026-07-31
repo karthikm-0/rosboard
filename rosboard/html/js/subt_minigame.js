@@ -1,0 +1,211 @@
+"use strict";
+
+// Whack-a-mole minigame overlay -- meant to be shown between trials to keep
+// participants engaged during trial reset time.
+//
+// Not auto-wired to anything yet -- call:
+//   window.SUBT.showMinigame(function (score) { console.log(score); });
+// and it renders full-screen. The onDone callback fires once the participant
+// clicks the "Continue" button after the timer runs out.
+//
+// 3x3 grid of holes; moles pop up randomly and disappear after a short window
+// unless clicked. 30-second round; final score shown on the end screen.
+(function () {
+  var COLS = 3, ROWS = 3;
+  var HOLE_PX = 110;                              // per-hole size
+  var GAP_PX = 18;
+  var GAME_MS = 10000;                            // round duration
+  var MOLE_UP_MIN_MS = 700, MOLE_UP_MAX_MS = 1600;   // mole visible window
+  var SPAWN_GAP_MIN_MS = 450, SPAWN_GAP_MAX_MS = 1100; // spawn cadence
+
+  function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+  function randInt(lo, hi) { return Math.floor(rand(lo, hi + 1)); }
+  function css(el, o) { for (var k in o) el.style[k] = o[k]; }
+
+  window.SUBT = window.SUBT || {};
+  var isOpen = false;
+
+  window.SUBT.showMinigame = function (onDone) {
+    if (isOpen) return;
+    isOpen = true;
+
+    // --- root overlay ---
+    var wrap = document.createElement("div");
+    css(wrap, {
+      position: "fixed", inset: "0", zIndex: "2147483646",
+      background: "rgba(0,0,0,0.94)", color: "#eee",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "sans-serif", userSelect: "none",
+    });
+
+    // --- title ---
+    var title = document.createElement("div");
+    title.textContent = "Whack the mole!";
+    css(title, { fontSize: "28px", fontWeight: "bold", marginBottom: "8px" });
+
+    var sub = document.createElement("div");
+    sub.textContent = "Click the moles as they pop up.";
+    css(sub, { fontSize: "13px", color: "#aaa", marginBottom: "20px" });
+
+    // --- HUD (score + timer) ---
+    var hud = document.createElement("div");
+    css(hud, {
+      display: "flex", gap: "32px", marginBottom: "18px",
+      fontSize: "18px", fontWeight: "bold", color: "#42a5f5"
+    });
+    var scoreEl = document.createElement("span");
+    var timeEl = document.createElement("span");
+    hud.appendChild(scoreEl); hud.appendChild(timeEl);
+
+    // --- grid of holes ---
+    var grid = document.createElement("div");
+    css(grid, {
+      display: "grid",
+      gridTemplateColumns: "repeat(" + COLS + ", " + HOLE_PX + "px)",
+      gridTemplateRows: "repeat(" + ROWS + ", " + HOLE_PX + "px)",
+      gap: GAP_PX + "px",
+    });
+
+    var holes = [];
+    for (var i = 0; i < COLS * ROWS; i++) {
+      var hole = document.createElement("div");
+      css(hole, {
+        width: HOLE_PX + "px", height: HOLE_PX + "px", borderRadius: "50%",
+        background: "#3a2818",
+        boxShadow: "inset 0 10px 22px rgba(0,0,0,0.7), 0 3px 4px rgba(0,0,0,0.4)",
+        position: "relative", overflow: "hidden", cursor: "crosshair",
+      });
+      grid.appendChild(hole);
+      holes.push({ el: hole, hasMole: false, mole: null });
+    }
+
+    // --- end-of-round "Continue" button ---
+    var doneBtn = document.createElement("button");
+    doneBtn.textContent = "Continue →";
+    css(doneBtn, {
+      marginTop: "22px", padding: "12px 22px", fontSize: "16px",
+      fontWeight: "bold", color: "#fff", background: "#66bb6a",
+      border: "none", borderRadius: "8px", cursor: "pointer",
+      display: "none",
+      boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
+    });
+
+    wrap.appendChild(title);
+    wrap.appendChild(sub);
+    wrap.appendChild(hud);
+    wrap.appendChild(grid);
+    wrap.appendChild(doneBtn);
+    document.body.appendChild(wrap);
+
+    // --- state ---
+    var score = 0, hits = 0, misses = 0;
+    var startMs = Date.now();
+    var running = true;
+    var spawnTimer = null;
+
+    function updateHud() {
+      scoreEl.textContent = "Score: " + score;
+      var remainingMs = Math.max(0, GAME_MS - (Date.now() - startMs));
+      timeEl.textContent = "Time: " + Math.ceil(remainingMs / 1000) + "s";
+    }
+
+    // --- one mole cycle ---
+    function popMole() {
+      var free = holes.filter(function (h) { return !h.hasMole; });
+      if (!free.length) return;
+      var h = free[randInt(0, free.length - 1)];
+
+      var mole = document.createElement("div");
+      css(mole, {
+        position: "absolute", left: "10%", right: "10%",
+        bottom: "-90%", width: "80%", height: "80%",
+        borderRadius: "48% 48% 30% 30%",
+        background: "radial-gradient(circle at 50% 38%, #a06840, #5a3820)",
+        transition: "bottom 0.16s ease-out",
+        cursor: "crosshair",
+      });
+      // face: two eyes + tiny nose
+      mole.innerHTML =
+        '<span style="position:absolute;left:22%;top:32%;width:14%;height:14%;' +
+        'background:#fff;border-radius:50%;box-shadow:inset 0 0 0 2px #111"></span>' +
+        '<span style="position:absolute;right:22%;top:32%;width:14%;height:14%;' +
+        'background:#fff;border-radius:50%;box-shadow:inset 0 0 0 2px #111"></span>' +
+        '<span style="position:absolute;left:44%;top:50%;width:12%;height:8%;' +
+        'background:#3a2010;border-radius:50%"></span>';
+
+      h.el.appendChild(mole);
+      h.hasMole = true;
+      h.mole = mole;
+
+      // Animate up on next frame so the transition triggers.
+      requestAnimationFrame(function () { mole.style.bottom = "8%"; });
+
+      var upMs = randInt(MOLE_UP_MIN_MS, MOLE_UP_MAX_MS);
+
+      function hit(e) {
+        e.preventDefault(); e.stopPropagation();
+        if (!h.hasMole) return;
+        score += 1; hits += 1;
+        updateHud();
+        // brief hit flash before retracting
+        mole.style.background = "radial-gradient(circle at 50% 38%, #ffce55, #a06840)";
+        clearMole(h, 100);
+      }
+      mole.addEventListener("mousedown", hit);
+      mole.addEventListener("touchstart", hit, { passive: false });
+
+      // auto-retract if not hit
+      setTimeout(function () {
+        if (h.hasMole) { misses += 1; clearMole(h, 0); }
+      }, upMs);
+    }
+
+    function clearMole(h, delayMs) {
+      if (!h.mole) { h.hasMole = false; return; }
+      h.hasMole = false;                          // no more hits credited
+      var m = h.mole;
+      h.mole = null;
+      setTimeout(function () {
+        m.style.bottom = "-90%";
+        setTimeout(function () { try { m.remove(); } catch (e) { } }, 180);
+      }, delayMs || 0);
+    }
+
+    function scheduleSpawn() {
+      if (!running) return;
+      spawnTimer = setTimeout(function () {
+        popMole();
+        scheduleSpawn();
+      }, randInt(SPAWN_GAP_MIN_MS, SPAWN_GAP_MAX_MS));
+    }
+
+    function tick() {
+      if (!running) return;
+      updateHud();
+      if (Date.now() - startMs >= GAME_MS) return endGame();
+      requestAnimationFrame(tick);
+    }
+
+    function endGame() {
+      running = false;
+      if (spawnTimer) clearTimeout(spawnTimer);
+      holes.forEach(function (h) { clearMole(h, 0); });
+      title.textContent = "Round complete";
+      sub.textContent = "Nice work.";
+      timeEl.textContent = "Accuracy: " +
+        (hits + misses ? Math.round(100 * hits / (hits + misses)) : 0) + "%";
+      doneBtn.style.display = "inline-block";
+    }
+
+    doneBtn.addEventListener("click", function () {
+      try { wrap.remove(); } catch (e) { }
+      isOpen = false;
+      if (typeof onDone === "function") onDone({ score: score, hits: hits, misses: misses });
+    });
+
+    updateHud();
+    scheduleSpawn();
+    tick();
+  };
+})();

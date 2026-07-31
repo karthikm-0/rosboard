@@ -78,7 +78,7 @@
                 if (!((r && r.publishers) || []).length) allPresent = false;
                 if (--pending === 0 && allPresent) markReady();
               },
-              function () { allPresent = false; if (--pending === 0) {} }
+              function () { allPresent = false; if (--pending === 0) { } }
             );
           });
         }, function () { /* rosapi call failed; keep polling */ });
@@ -116,11 +116,13 @@
     btn.id = "subt-next-btn";
     // z-index above the loading overlay (999998) so the corner button remains
     // clickable while the "Ready — click Start" overlay is up.
-    css(btn, { position: "fixed", right: "24px", bottom: "24px", zIndex: 999999,
+    css(btn, {
+      position: "fixed", right: "24px", bottom: "24px", zIndex: 999999,
       padding: "14px 22px", fontSize: "16px", fontWeight: "bold", color: "#fff",
       background: "#3f51b5", border: "none", borderRadius: "8px", cursor: "pointer",
       boxShadow: "0 2px 6px rgba(0,0,0,0.5)", fontFamily: "sans-serif",
-      userSelect: "none" });
+      userSelect: "none"
+    });
     // First press starts trial 1; afterwards it advances to the next trial.
     // Starts DISABLED -- enabled once rosbridge is connected AND advance_to_stdin
     // has subscribed, so an early click can't silently drop the START pulse.
@@ -130,18 +132,22 @@
     btn.style.cursor = "not-allowed";
 
     var lbl = document.createElement("div");
-    css(lbl, { position: "fixed", right: "24px", bottom: "70px", fontSize: "11px",
-      color: "#ffa726", fontFamily: "sans-serif", zIndex: 99999 });
+    css(lbl, {
+      position: "fixed", right: "24px", bottom: "70px", fontSize: "11px",
+      color: "#ffa726", fontFamily: "sans-serif", zIndex: 99999
+    });
     function setLabel(t, c) { lbl.textContent = "experiment: " + t; lbl.style.color = c; }
     setLabel("connecting…", "#ffa726");
 
     // Trial counter, top-right. "Trial N / total" once the participant has
     // started. Before Start: shows "Ready" so they know something's coming.
     var trialLbl = document.createElement("div");
-    css(trialLbl, { position: "fixed", top: "16px", right: "16px", zIndex: 99999,
+    css(trialLbl, {
+      position: "fixed", top: "16px", right: "16px", zIndex: 99999,
       padding: "8px 14px", fontSize: "14px", fontWeight: "bold",
       color: "#fff", background: "rgba(0,0,0,0.6)", borderRadius: "6px",
-      fontFamily: "sans-serif", userSelect: "none" });
+      fontFamily: "sans-serif", userSelect: "none"
+    });
     document.body.appendChild(trialLbl);
     function setTrialLabel(n) {
       if (n <= 0) {
@@ -161,11 +167,13 @@
     // stale frames after clicking Next (the runner needs ~1-2s to reset the
     // robot to the next spawn) and mash the button thinking nothing happened.
     var overlay = document.createElement("div");
-    css(overlay, { position: "fixed", inset: "0", zIndex: "999998",
+    css(overlay, {
+      position: "fixed", inset: "0", zIndex: "999998",
       background: "rgba(0,0,0,0.92)", color: "#fff",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      fontFamily: "sans-serif" });
+      fontFamily: "sans-serif"
+    });
     var overlayTitle = document.createElement("div");
     css(overlayTitle, { fontSize: "28px", fontWeight: "bold", marginBottom: "16px" });
     var overlaySub = document.createElement("div");
@@ -192,7 +200,7 @@
       function finish() { if (called) return; called = true; done(); }
       var subs = [];
       var timer = setTimeout(function () {
-        subs.forEach(function (s) { try { s.unsubscribe(); } catch (e) {} });
+        subs.forEach(function (s) { try { s.unsubscribe(); } catch (e) { } });
         finish();
       }, safetyMs);
       wl.forEach(function (t) {
@@ -202,7 +210,7 @@
         });
         subs.push(sub);
         sub.subscribe(function () {
-          try { sub.unsubscribe(); } catch (e) {}
+          try { sub.unsubscribe(); } catch (e) { }
           if (--remaining === 0) { clearTimeout(timer); finish(); }
         });
       });
@@ -252,7 +260,7 @@
     function refreshCompassForTrial(n) {
       if (!brokerUrl || !pid || n < 1 || (total > 0 && n > total)) return;
       fetch(brokerUrl.replace(/\/$/, "") + "/trial-info?pid="
-            + encodeURIComponent(pid) + "&trial=" + n)
+        + encodeURIComponent(pid) + "&trial=" + n)
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {
           if (!j) return;
@@ -268,7 +276,7 @@
       // participant to the Prolific completion URL (or a local thank-you).
       if (!brokerUrl || !pid) return completePage();
       fetch(brokerUrl.replace(/\/$/, "") + "/release?PROLIFIC_PID="
-            + encodeURIComponent(pid), { method: "POST" })
+        + encodeURIComponent(pid), { method: "POST" })
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) {
           if (j && j.completion_url && !/REPLACE_ME/.test(j.completion_url))
@@ -309,13 +317,25 @@
         return;
       } else {
         pulse();                                 // STOP current trial
-        setTimeout(pulse, 120);                  // START next trial
-        refreshCompassForTrial(pressCount);      // markers for the incoming trial
-        // Cover the sensors during the trial-reset gap; lift the moment the
-        // next trial's first frames land (or after the safety timeout).
-        showOverlay("Loading trial " + pressCount + "…");
-        overlaySub.textContent = "Please wait — do not close this tab";
-        waitForFirstFrames(safetyMs, hideOverlay);
+        // Runs the deferred start-next-trial + overlay + first-frames wait.
+        // Extracted so we can invoke it either directly (no minigame) OR from
+        // the minigame's onDone callback.
+        var startNext = function () {
+          setTimeout(pulse, 120);                    // START next trial
+          refreshCompassForTrial(pressCount);
+          showOverlay("Loading trial " + pressCount + "…");
+          overlaySub.textContent = "Please wait — do not close this tab";
+          waitForFirstFrames(safetyMs, hideOverlay);
+        };
+        // cfg.minigameBetweenTrials (bool): if true and the minigame is loaded,
+        // show it between trials; otherwise skip straight to the next trial.
+        // Toggle in subt_config.js -> experiment.minigameBetweenTrials.
+        if (cfg.minigameBetweenTrials &&
+            window.SUBT && typeof window.SUBT.showMinigame === "function") {
+          window.SUBT.showMinigame(startNext);
+        } else {
+          startNext();
+        }
       }
 
       btn.textContent = labelForCount(pressCount);

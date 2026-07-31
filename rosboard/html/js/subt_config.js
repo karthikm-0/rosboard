@@ -145,6 +145,10 @@ window.SUBT = {
     brokerUrl: "",
     rosbridgePath: "/rosbridge",      // same-origin wss path behind the tunnel
     debounceMs: 800,                  // ignore repeat clicks within this window
+    // Show the whack-a-mole minigame (subt_minigame.js) between trials. When
+    // false, Next → immediately starts the next trial (previous behavior).
+    // Study-design toggle -- flip while iterating without touching the runner.
+    minigameBetweenTrials: true,
   },
 };
 
