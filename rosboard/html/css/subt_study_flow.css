@@ -198,6 +198,16 @@
   font-size: 14px;
 }
 
+.subt-flow-red {
+  color: #ff5252;
+  font-weight: 700;
+}
+
+.subt-flow-cyan {
+  color: #42e8ff;
+  font-weight: 700;
+}
+
 .subt-flow-trial-card {
   text-align: center;
 }
