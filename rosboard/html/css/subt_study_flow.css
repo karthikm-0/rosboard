@@ -46,6 +46,10 @@
   margin: 22px 0;
 }
 
+.subt-flow-page figure.subt-flow-centered-figure {
+  text-align: center;
+}
+
 .subt-flow-page img,
 .subt-flow-page video {
   max-width: 100%;
@@ -60,8 +64,11 @@
 }
 
 .subt-flow-preview-figure {
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   max-width: 100%;
+  text-align: center;
 }
 
 .subt-flow-preview-image {
@@ -88,10 +95,22 @@
 }
 
 .subt-flow-preview-figure figcaption {
-  max-width: 100%;
+  width: min(423px, 100%);
+  text-align: left;
 }
 
 .subt-flow-light-figure img {
+  background: #f4f6fb;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.subt-flow-light-figure,
+.subt-flow-console-figure {
+  text-align: center;
+}
+
+.subt-flow-joystick-figure img {
   background: #f4f6fb;
   padding: 14px;
   box-sizing: border-box;

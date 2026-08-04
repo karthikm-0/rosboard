@@ -89,6 +89,8 @@
     });
     preloadImage("assets/instructions/whackamole_preview.png");
     preloadImage("assets/instructions/RobotDrivingTask.png");
+    preloadImage("assets/instructions/YourRobotDrivingTask.png");
+    preloadImage("assets/instructions/joystick_preview.png");
     preloadVideo("assets/instructions/RobotConsoleLoop.mp4");
     preloadVideo("assets/instructions/ReportConditionTraining.mp4");
   }
@@ -147,6 +149,31 @@
     return data;
   }
 
+  function wireConditionalFields(root) {
+    $all("[data-show-if]", root).forEach(function (el) {
+      var spec = el.getAttribute("data-show-if") || "";
+      var parts = spec.split(":");
+      if (parts.length !== 2) return;
+      var name = parts[0];
+      var accepted = parts[1].split(",").map(function (s) { return s.trim(); });
+      var sync = function () {
+        var checked = $('input[name="' + name + '"]:checked', root);
+        var show = checked && accepted.indexOf(checked.value) >= 0;
+        el.style.display = show ? "" : "none";
+        if (!show) {
+          $all("input, textarea, select", el).forEach(function (field) {
+            if (field.type === "radio" || field.type === "checkbox") field.checked = false;
+            else field.value = "";
+          });
+        }
+      };
+      $all('input[name="' + name + '"]', root).forEach(function (input) {
+        input.addEventListener("change", sync);
+      });
+      sync();
+    });
+  }
+
   function wireConsent(root) {
     var agree = $("[data-flow-consent]", root);
     var proceed = $('[data-flow-action="proceed"]', root);
@@ -173,6 +200,7 @@
     showShell();
     panel().innerHTML = html;
     applyVariant(panel(), opts.variant);
+    wireConditionalFields(panel());
     wireConsent(panel());
     return panel();
   }
@@ -271,7 +299,7 @@
     hideShell();
     return new Promise(function (resolve) {
       if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
-        window.SUBT.showMinigame(resolve, { doneLabel: "End Practice" });
+        window.SUBT.showMinigame(resolve, { doneLabel: "End Practice", allowEarlyEnd: true });
       } else {
         showRawPage("<h1>Practice Skipped</h1><p>The whack-a-mole game is not loaded.</p>", "Continue")
           .then(resolve);
