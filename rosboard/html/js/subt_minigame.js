@@ -87,7 +87,7 @@
       marginTop: "22px", padding: "12px 22px", fontSize: "16px",
       fontWeight: "bold", color: "#fff", background: "#66bb6a",
       border: "none", borderRadius: "8px", cursor: "pointer",
-      display: "none",
+      display: opts.allowEarlyEnd ? "inline-block" : "none",
       boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
     });
 
@@ -195,6 +195,9 @@
     }
 
     doneBtn.addEventListener("click", function () {
+      running = false;
+      if (spawnTimer) clearTimeout(spawnTimer);
+      holes.forEach(function (h) { clearMole(h, 0); });
       try { wrap.remove(); } catch (e) { }
       isOpen = false;
       if (typeof onDone === "function") onDone({ score: score, hits: hits, misses: misses });
