@@ -159,7 +159,12 @@
       var sync = function () {
         var checked = $('input[name="' + name + '"]:checked', root);
         var show = checked && accepted.indexOf(checked.value) >= 0;
-        el.style.display = show ? "" : "none";
+        el.style.visibility = show ? "" : "hidden";
+        el.style.pointerEvents = show ? "" : "none";
+        el.setAttribute("aria-hidden", show ? "false" : "true");
+        $all("input, textarea, select", el).forEach(function (field) {
+          field.disabled = !show;
+        });
         if (!show) {
           $all("input, textarea, select", el).forEach(function (field) {
             if (field.type === "radio" || field.type === "checkbox") field.checked = false;
