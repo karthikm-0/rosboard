@@ -5,11 +5,11 @@
 //
 // Not auto-wired to anything yet -- call:
 //   window.SUBT.showMinigame(function (score) { console.log(score); });
-// and it renders full-screen. The onDone callback fires once the participant
-// clicks the "Continue" button after the round ends.
+// and it renders full-screen. For between-trial rounds, the onDone callback
+// fires immediately when the timer ends. Practice rounds can expose a button.
 //
 // 3x3 grid of holes; moles pop up randomly and disappear after a short window
-// unless clicked. Final score is shown on the end screen.
+// unless clicked.
 (function () {
   var COLS = 3, ROWS = 3;
   var HOLE_PX = 110;                              // per-hole size
@@ -80,7 +80,7 @@
       holes.push({ el: hole, hasMole: false, mole: null });
     }
 
-    // --- end-of-round "Continue" button ---
+    // --- optional practice/end button ---
     var doneBtn = document.createElement("button");
     doneBtn.textContent = opts.doneLabel || "Continue";
     css(doneBtn, {
@@ -185,7 +185,17 @@
       requestAnimationFrame(tick);
     }
 
+    function finish() {
+      running = false;
+      if (spawnTimer) clearTimeout(spawnTimer);
+      holes.forEach(function (h) { clearMole(h, 0); });
+      try { wrap.remove(); } catch (e) { }
+      isOpen = false;
+      if (typeof onDone === "function") onDone({ score: score, hits: hits, misses: misses });
+    }
+
     function endGame() {
+      if (!opts.allowEarlyEnd) return finish();
       running = false;
       if (spawnTimer) clearTimeout(spawnTimer);
       holes.forEach(function (h) { clearMole(h, 0); });
@@ -195,12 +205,7 @@
     }
 
     doneBtn.addEventListener("click", function () {
-      running = false;
-      if (spawnTimer) clearTimeout(spawnTimer);
-      holes.forEach(function (h) { clearMole(h, 0); });
-      try { wrap.remove(); } catch (e) { }
-      isOpen = false;
-      if (typeof onDone === "function") onDone({ score: score, hits: hits, misses: misses });
+      finish();
     });
 
     updateHud();
