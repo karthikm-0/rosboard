@@ -1,0 +1,43 @@
+<section class="subt-flow-page" data-step="experiment-end-questions">
+  <h1>Final Questionnaire</h1>
+  <p>Please answer the following questions about your experience in the study.</p>
+  <div class="subt-flow-question" data-question-id="duplicate_count_previous_batch">
+    <label>Approximately how many, if any, of the robot scenarios felt like a duplicate of another scenario from the previous batch?</label>
+    <input name="duplicate_count_previous_batch" type="number" min="0" step="1">
+  </div>
+  <fieldset class="subt-flow-question" data-question-id="screen_size">
+    <legend>Approximately how large a screen were you using?</legend>
+    <label><input type="radio" name="screen_size" value="phone"> Phone sized</label>
+    <label><input type="radio" name="screen_size" value="tablet"> Tablet sized, less than one sheet of paper</label>
+    <label><input type="radio" name="screen_size" value="medium"> Medium laptop or monitor size, one to two sheets of paper</label>
+    <label><input type="radio" name="screen_size" value="large"> Large monitor, two or more sheets of paper</label>
+  </fieldset>
+  <fieldset class="subt-flow-question" data-question-id="input_device">
+    <legend>What kind of input device did you use?</legend>
+    <label><input type="radio" name="input_device" value="mouse"> Mouse</label>
+    <label><input type="radio" name="input_device" value="trackpad"> Track pad</label>
+    <label><input type="radio" name="input_device" value="touchscreen"> Touchscreen</label>
+    <label><input type="radio" name="input_device" value="other"> Other</label>
+  </fieldset>
+  <div class="subt-flow-question" data-question-id="age">
+    <label>What is your age?</label>
+    <input name="age" type="number" min="18" step="1">
+  </div>
+  <div class="subt-flow-question" data-question-id="gender">
+    <label>What is your gender?</label>
+    <input name="gender" type="text">
+  </div>
+  <fieldset class="subt-flow-question" data-question-id="sim_experience">
+    <legend>Rate your prior experience level with video games and/or vehicle simulators.</legend>
+    <input name="sim_experience" type="range" min="1" max="7" step="1">
+    <div class="subt-flow-scale-labels"><span>1 - No prior experience</span><span>7 - Extensive experience</span></div>
+  </fieldset>
+  <div class="subt-flow-question" data-question-id="other_feedback">
+    <label>Any other information about the experiment or your experience that you would like to provide?</label>
+    <textarea name="other_feedback" rows="4"></textarea>
+  </div>
+  <div class="subt-flow-question" data-question-id="attention_check">
+    <label>Type “34” in the box.</label>
+    <input name="attention_check" type="text">
+  </div>
+</section>

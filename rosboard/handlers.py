@@ -52,10 +52,10 @@ class ROSBoardSocketHandler(tornado.websocket.WebSocketHandler):
         }], separators=(',', ':')))
 
     def on_close(self):
-        ROSBoardSocketHandler.sockets.remove(self)
+        ROSBoardSocketHandler.sockets.discard(self)
 
         # when socket closes, remove ourselves from all subscriptions
-        for topic_name in self.node.remote_subs:
+        for topic_name in list(self.node.remote_subs.keys()):
             if self.id in self.node.remote_subs[topic_name]:
                 self.node.remote_subs[topic_name].remove(self.id)
 
@@ -66,16 +66,22 @@ class ROSBoardSocketHandler(tornado.websocket.WebSocketHandler):
         latency and clock differences.
         """
 
-        for socket in cls.sockets:
+        dead_sockets = []
+        for socket in list(cls.sockets):
             try:
                 socket.last_ping_times[socket.ping_seq % 1024] = time.time() * 1000
                 if socket.ws_connection and not socket.ws_connection.is_closing():
                     socket.write_message(json.dumps([ROSBoardSocketHandler.MSG_PING, {
                         ROSBoardSocketHandler.PING_SEQ: socket.ping_seq,
                     }], separators=(',', ':')))
+                else:
+                    dead_sockets.append(socket)
                 socket.ping_seq += 1
             except Exception as e:
                 print("Error sending message: %s" % str(e))
+                dead_sockets.append(socket)
+        for socket in dead_sockets:
+            cls.sockets.discard(socket)
 
     @classmethod
     def broadcast(cls, message):
@@ -88,13 +94,22 @@ class ROSBoardSocketHandler(tornado.websocket.WebSocketHandler):
         try:
             if message[0] == ROSBoardSocketHandler.MSG_TOPICS:
                 json_msg = json.dumps(message, separators=(',', ':'))
-                for socket in cls.sockets:
+                dead_sockets = []
+                for socket in list(cls.sockets):
                     if socket.ws_connection and not socket.ws_connection.is_closing():
                         socket.write_message(json_msg)
+                    else:
+                        dead_sockets.append(socket)
+                for socket in dead_sockets:
+                    cls.sockets.discard(socket)
             elif message[0] == ROSBoardSocketHandler.MSG_MSG:
                 topic_name = message[1]["_topic_name"]
                 json_msg = None
-                for socket in cls.sockets:
+                dead_sockets = []
+                for socket in list(cls.sockets):
+                    if not socket.ws_connection or socket.ws_connection.is_closing():
+                        dead_sockets.append(socket)
+                        continue
                     if topic_name not in socket.node.remote_subs:
                         continue
                     if socket.id not in socket.node.remote_subs[topic_name]:
@@ -108,6 +123,8 @@ class ROSBoardSocketHandler(tornado.websocket.WebSocketHandler):
                             json_msg = json.dumps(message, separators=(',', ':'))
                         socket.write_message(json_msg)
                     socket.last_data_times_by_topic[topic_name] = t
+                for socket in dead_sockets:
+                    cls.sockets.discard(socket)
         except Exception as e:
             print("Error sending message: %s" % str(e))
             traceback.print_exc()
@@ -117,7 +134,7 @@ class ROSBoardSocketHandler(tornado.websocket.WebSocketHandler):
         Message received from the client.
         """
 
-        if self.ws_connection.is_closing():
+        if not self.ws_connection or self.ws_connection.is_closing():
             return
 
         # JSON decode it, give up if it isn't valid JSON

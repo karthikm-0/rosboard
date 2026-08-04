@@ -6,10 +6,10 @@
 // Not auto-wired to anything yet -- call:
 //   window.SUBT.showMinigame(function (score) { console.log(score); });
 // and it renders full-screen. The onDone callback fires once the participant
-// clicks the "Continue" button after the timer runs out.
+// clicks the "Continue" button after the round ends.
 //
 // 3x3 grid of holes; moles pop up randomly and disappear after a short window
-// unless clicked. 30-second round; final score shown on the end screen.
+// unless clicked. Final score is shown on the end screen.
 (function () {
   var COLS = 3, ROWS = 3;
   var HOLE_PX = 110;                              // per-hole size
@@ -25,7 +25,8 @@
   window.SUBT = window.SUBT || {};
   var isOpen = false;
 
-  window.SUBT.showMinigame = function (onDone) {
+  window.SUBT.showMinigame = function (onDone, opts) {
+    opts = opts || {};
     if (isOpen) return;
     isOpen = true;
 
@@ -48,15 +49,14 @@
     sub.textContent = "Click the moles as they pop up.";
     css(sub, { fontSize: "13px", color: "#aaa", marginBottom: "20px" });
 
-    // --- HUD (score + timer) ---
+    // --- HUD ---
     var hud = document.createElement("div");
     css(hud, {
-      display: "flex", gap: "32px", marginBottom: "18px",
+      marginBottom: "18px",
       fontSize: "18px", fontWeight: "bold", color: "#42a5f5"
     });
     var scoreEl = document.createElement("span");
-    var timeEl = document.createElement("span");
-    hud.appendChild(scoreEl); hud.appendChild(timeEl);
+    hud.appendChild(scoreEl);
 
     // --- grid of holes ---
     var grid = document.createElement("div");
@@ -82,7 +82,7 @@
 
     // --- end-of-round "Continue" button ---
     var doneBtn = document.createElement("button");
-    doneBtn.textContent = "Continue →";
+    doneBtn.textContent = opts.doneLabel || "Continue";
     css(doneBtn, {
       marginTop: "22px", padding: "12px 22px", fontSize: "16px",
       fontWeight: "bold", color: "#fff", background: "#66bb6a",
@@ -106,8 +106,6 @@
 
     function updateHud() {
       scoreEl.textContent = "Score: " + score;
-      var remainingMs = Math.max(0, GAME_MS - (Date.now() - startMs));
-      timeEl.textContent = "Time: " + Math.ceil(remainingMs / 1000) + "s";
     }
 
     // --- one mole cycle ---
@@ -193,8 +191,6 @@
       holes.forEach(function (h) { clearMole(h, 0); });
       title.textContent = "Round complete";
       sub.textContent = "Nice work.";
-      timeEl.textContent = "Accuracy: " +
-        (hits + misses ? Math.round(100 * hits / (hits + misses)) : 0) + "%";
       doneBtn.style.display = "inline-block";
     }
 

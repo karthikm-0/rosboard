@@ -15,10 +15,12 @@ window.SUBT = {
     // publishes it when publish_lidar_preview:=true in x1_world.launch.py.
     { topicName: "/X1/points_preview", topicType: "sensor_msgs/msg/PointCloud2" },
   ],
+  viewerMaxUpdateRateHz: 2,
 
   // true  = locked participant view (fixed whitelist, no topic browser, no close)
   // false = stock rosboard (browse/add/remove any topic)
   lockdown: true,
+  viewerActive: false,
 
   // Mouse joystick that publishes control input via rosbridge.
   joystick: {
@@ -131,6 +133,7 @@ window.SUBT = {
   experiment: {
     enabled: true,
     advanceTopic: "/experiment/advance",
+    clockTopic: "/clock",
     // Button label / behavior progresses across the sequence:
     //   press 1              -> startLabel  ("Start ▶")       : STARTs trial 1
     //   press 2..totalTrials -> label       ("Next trial ▶")  : STOP+START
@@ -145,10 +148,23 @@ window.SUBT = {
     brokerUrl: "",
     rosbridgePath: "/rosbridge",      // same-origin wss path behind the tunnel
     debounceMs: 800,                  // ignore repeat clicks within this window
+    viewerSettleMs: 1200,             // short delay after sim advance before showing live view
     // Show the whack-a-mole minigame (subt_minigame.js) between trials. When
     // false, Next → immediately starts the next trial (previous behavior).
     // Study-design toggle -- flip while iterating without touching the runner.
     minigameBetweenTrials: true,
+  },
+
+  // High-level participant procedure: consent, instructions, whack-a-mole
+  // practice, D/R task sets, per-trial questions, set-end questions, and final
+  // questionnaire. The flow file can be overridden locally with ?flow=<name>
+  // and the condition order with ?order=DR or ?condition_order=D,R.
+  studyFlow: {
+    enabled: true,
+    flowFile: "study_flows/operator_readiness_pilot.json",
+    // Production order comes from the broker as ?condition_order=DR or RD.
+    // Leave unset here so local tests use the flow file's default only.
+    conditionOrder: null,
   },
 };
 

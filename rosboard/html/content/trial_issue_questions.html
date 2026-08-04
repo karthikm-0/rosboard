@@ -1,0 +1,15 @@
+<section class="subt-flow-page" data-step="trial-issue-questions">
+  <h1>Robot Trial Questions</h1>
+  <fieldset class="subt-flow-question" data-question-id="trial_issue_occurred">
+    <legend>Did any issues occur during this robot trial?</legend>
+    <label><input type="radio" name="trial_issue_occurred" value="technical"> Yes, a technical issue such as lag or network connection.</label>
+    <label><input type="radio" name="trial_issue_occurred" value="nontechnical"> Yes, a non-technical issue.</label>
+    <label><input type="radio" name="trial_issue_occurred" value="none"> No, no issues.</label>
+  </fieldset>
+  <fieldset class="subt-flow-question" data-question-id="trial_issue_impact" data-show-if="trial_issue_occurred:technical,nontechnical">
+    <legend>How much did the issue impact your performance?</legend>
+    <label><input type="radio" name="trial_issue_impact" value="a_lot"> A lot</label>
+    <label><input type="radio" name="trial_issue_impact" value="a_little"> A little</label>
+    <label><input type="radio" name="trial_issue_impact" value="not_significantly"> Not significantly</label>
+  </fieldset>
+</section>
