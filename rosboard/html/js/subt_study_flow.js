@@ -312,6 +312,10 @@
     });
   }
 
+  function trialWhackamoleOptions(trialNumber) {
+    return { seed: "operator-readiness-trial-" + String(trialNumber) };
+  }
+
   function formatSeconds(t) {
     t = Math.max(0, Number(t) || 0);
     return t.toFixed(1) + " s";
@@ -472,7 +476,8 @@
           return new Promise(function (resolve) {
             hideShell();
             if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
-              window.SUBT.showMinigame(resolve);
+              var current = window.SUBT.experimentController.currentTrial();
+              window.SUBT.showMinigame(resolve, trialWhackamoleOptions(current + 1));
             } else {
               resolve();
             }

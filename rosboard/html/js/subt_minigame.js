@@ -8,19 +8,46 @@
 // and it renders full-screen. For between-trial rounds, the onDone callback
 // fires immediately when the timer ends. Practice rounds can expose a button.
 //
-// 3x3 grid of holes; moles pop up randomly and disappear after a short window
-// unless clicked.
+// 3x3 grid of holes; moles pop up pseudo-randomly and disappear after a short
+// window unless clicked. Trial rounds can pass opts.seed for repeatability.
 (function () {
   var COLS = 3, ROWS = 3;
   var HOLE_PX = 110;                              // per-hole size
   var GAP_PX = 18;
-  var GAME_MS = 10000;                            // round duration
+  var GAME_MS = 10000;                            // default round duration
   var MOLE_UP_MIN_MS = 700, MOLE_UP_MAX_MS = 1600;   // mole visible window
   var SPAWN_GAP_MIN_MS = 450, SPAWN_GAP_MAX_MS = 1100; // spawn cadence
 
-  function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
-  function randInt(lo, hi) { return Math.floor(rand(lo, hi + 1)); }
+  function hashSeed(text) {
+    var h = 2166136261;
+    text = String(text || "");
+    for (var i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function seededRandom(seed) {
+    var s = seed >>> 0;
+    return function () {
+      s += 0x6D2B79F5;
+      var t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   function css(el, o) { for (var k in o) el.style[k] = o[k]; }
+
+  function makeRand(opts) {
+    var random = opts.seed == null ? Math.random : seededRandom(hashSeed(opts.seed));
+    return {
+      rand: function (lo, hi) { return lo + random() * (hi - lo); },
+      randInt: function (lo, hi) { return Math.floor(lo + random() * (hi - lo + 1)); },
+    };
+  }
 
   window.SUBT = window.SUBT || {};
   var isOpen = false;
@@ -29,6 +56,7 @@
     opts = opts || {};
     if (isOpen) return;
     isOpen = true;
+    var rng = makeRand(opts);
 
     // --- root overlay ---
     var wrap = document.createElement("div");
@@ -112,7 +140,7 @@
     function popMole() {
       var free = holes.filter(function (h) { return !h.hasMole; });
       if (!free.length) return;
-      var h = free[randInt(0, free.length - 1)];
+      var h = free[rng.randInt(0, free.length - 1)];
 
       var mole = document.createElement("div");
       css(mole, {
@@ -139,7 +167,7 @@
       // Animate up on next frame so the transition triggers.
       requestAnimationFrame(function () { mole.style.bottom = "8%"; });
 
-      var upMs = randInt(MOLE_UP_MIN_MS, MOLE_UP_MAX_MS);
+      var upMs = rng.randInt(MOLE_UP_MIN_MS, MOLE_UP_MAX_MS);
 
       function hit(e) {
         e.preventDefault(); e.stopPropagation();
@@ -175,7 +203,7 @@
       spawnTimer = setTimeout(function () {
         popMole();
         scheduleSpawn();
-      }, randInt(SPAWN_GAP_MIN_MS, SPAWN_GAP_MAX_MS));
+      }, rng.randInt(SPAWN_GAP_MIN_MS, SPAWN_GAP_MAX_MS));
     }
 
     function tick() {
