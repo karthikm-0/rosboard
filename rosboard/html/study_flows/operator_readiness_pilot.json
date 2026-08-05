@@ -5,6 +5,38 @@
     { "conditionSlot": 1, "defaultCount": 10 },
     { "conditionSlot": 2, "defaultCount": 10 }
   ],
+  "conditionTraining": {
+    "D": [
+      {
+        "title": "Driving Practice",
+        "stopLabel": "End Driving Practice",
+        "goal": { "x": 0.0, "y": 0.0 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      },
+      {
+        "type": "condition_intro",
+        "buttonLabel": "Start Scenario Practice"
+      },
+      {
+        "title": "Scenario Practice",
+        "stopLabel": "End Scenario Practice",
+        "goal": { "x": 3.54, "y": 3.54 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      }
+    ],
+    "R": [
+      {
+        "type": "condition_intro",
+        "buttonLabel": "Start Scenario Practice"
+      },
+      {
+        "title": "Scenario Practice",
+        "stopLabel": "End Scenario Practice",
+        "goal": { "x": 3.54, "y": 3.54 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      }
+    ]
+  },
   "steps": [
     { "type": "content", "content": "content/consent.html", "requiresConsent": true },
     { "type": "content", "content": "content/whackamole_instructions.html", "buttonLabel": "Start Practice" },
@@ -12,14 +44,12 @@
     { "type": "content", "content": "content/robot_task_description.html" },
     { "type": "content", "content": "content/robot_console_instructions.html" },
     { "type": "content", "content": "content/robot_driving_practice_instructions.html" },
-    { "type": "robot_practice", "title": "Driving Practice", "condition": "D", "stopLabel": "End Driving Practice" },
-    { "type": "condition_intro", "conditionSlot": 1 },
-    { "type": "robot_practice", "title": "Scenario Practice", "conditionSlot": 1, "stopLabel": "End Scenario Practice" },
+    { "type": "condition_training", "conditionSlot": 1 },
     { "type": "set_instructions", "conditionSlot": 1 },
     { "type": "trial_set", "conditionSlot": 1 },
     { "type": "content", "content": "content/set_end_questions.html", "collect": "set_end" },
     { "type": "content", "content": "content/break.html" },
-    { "type": "condition_intro", "conditionSlot": 2 },
+    { "type": "condition_training", "conditionSlot": 2 },
     { "type": "set_instructions", "conditionSlot": 2 },
     { "type": "trial_set", "conditionSlot": 2 },
     { "type": "content", "content": "content/set_end_questions.html", "collect": "set_end" },

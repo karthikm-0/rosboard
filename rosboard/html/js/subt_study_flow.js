@@ -384,7 +384,7 @@
     return waitForRobotReady().then(function () { return new Promise(function (resolve) {
       hideShell();
       activateViewer().then(function () {
-      window.SUBT.experimentController.startTrial({ condition: condition }, function () {
+        window.SUBT.experimentController.startTrial({ condition: condition }, function () {
         var clock = null;
         var lastElapsed = 0;
         if (condition === "R") {
@@ -417,22 +417,51 @@
   function runRobotPractice(step, order) {
     var condition = step.condition || getCondition(order, step.conditionSlot);
     return waitForRobotReady().then(function () { return new Promise(function (resolve) {
+      hideExperimentOverlay();
       hideShell();
       activateViewer().then(function () {
-      window.SUBT.experimentController.startTrial({
-        condition: condition,
-        isPractice: true,
-        label: step.title || "Practice",
-      }, function () {
-        waitForTrialButton(step.stopLabel || "End Practice").then(function () {
-          window.SUBT.experimentController.stopTrial(function () {
-            setViewerActive(false);
-            resolve();
+        hideExperimentOverlay();
+        window.SUBT.experimentController.startTrial({
+          condition: condition,
+          isPractice: true,
+          label: step.title || "Practice",
+          goal: step.goal,
+          takeover: step.takeover,
+        }, function () {
+          waitForTrialButton(step.stopLabel || "End Practice").then(function () {
+            window.SUBT.experimentController.stopTrial(function () {
+              setViewerActive(false);
+              resolve();
+            });
           });
         });
       });
-      });
     }); });
+  }
+
+  function runConditionTraining(flow, step, order) {
+    var condition = getCondition(order, step.conditionSlot);
+    var plans = (flow.conditionTraining || {})[condition] || [];
+    return plans.reduce(function (p, plan) {
+      return p.then(function () {
+        if (plan.type === "condition_intro") {
+          return showContent(contentForCondition("task", condition), {
+            variant: variantFor(step.conditionSlot),
+            buttonLabel: plan.buttonLabel || "Next",
+          });
+        }
+        if (plan.type === "content") {
+          return showContent(plan.content, { buttonLabel: plan.buttonLabel || "Next" });
+        }
+        return runRobotPractice({
+          title: plan.title,
+          condition: condition,
+          stopLabel: plan.stopLabel,
+          goal: plan.goal,
+          takeover: plan.takeover,
+        }, order);
+      });
+    }, Promise.resolve());
   }
 
   function runTrialSet(condition, count) {
@@ -477,6 +506,7 @@
     }
     if (step.type === "whackamole_practice") return whackamolePractice();
     if (step.type === "robot_practice") return runRobotPractice(step, order);
+    if (step.type === "condition_training") return runConditionTraining(flow, step, order);
     if (step.type === "condition_intro") {
       var c1 = getCondition(order, step.conditionSlot);
       return showContent(contentForCondition("task", c1), { variant: variantFor(step.conditionSlot) });
