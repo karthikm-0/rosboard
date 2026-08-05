@@ -55,6 +55,7 @@
     var readyPoll = null;
     var currentTrial = 0;
     var trialActive = false;
+    var trialIsPractice = false;
     var simTimeSec = null;
     var trialStartSimSec = null;
     var trialElapsedSimSec = 0;
@@ -177,11 +178,41 @@
       cbs.forEach(function (cb) { try { cb(); } catch (e) {} });
     }
 
+    function expectNextSim() {
+      simReady = false;
+      if (readyPoll) { clearInterval(readyPoll); readyPoll = null; }
+      beginReadinessPolling();
+    }
+
     function waitForViewerSettled(done) {
       // Do not subscribe to camera/lidar through rosbridge here. The participant
       // viewer already receives those streams through rosboard's throttled
       // transport; duplicating them through rosbridge makes joystick control lag.
       setTimeout(done, cfg.viewerSettleMs || 1200);
+    }
+
+    function waitForFreshSimTick(before, done) {
+      if (before == null && simTimeSec != null) {
+        done();
+        return;
+      }
+      if (before != null && simTimeSec != null && simTimeSec > before + 0.05) {
+        done();
+        return;
+      }
+      var started = Date.now();
+      var timer = setInterval(function () {
+        if (before == null && simTimeSec != null) {
+          clearInterval(timer);
+          done();
+        } else if (before != null && simTimeSec != null && simTimeSec > before + 0.05) {
+          clearInterval(timer);
+          done();
+        } else if (Date.now() - started > 5000) {
+          clearInterval(timer);
+          done();
+        }
+      }, 50);
     }
 
     function refreshCompassForTrial(n) {
@@ -196,8 +227,6 @@
         })
         .catch(function () {});
     }
-    refreshCompassForTrial(1);
-
     function completePage() {
       document.body.innerHTML =
         '<div style="font:16px sans-serif;color:#eee;background:#111;'
@@ -227,6 +256,7 @@
       onReady: function (cb) { if (simReady) cb(); else readyCallbacks.push(cb); },
       showOverlay: showOverlay,
       hideOverlay: hideOverlay,
+      expectNextSim: expectNextSim,
       setChromeVisible: function (visible) {
         btn.style.display = visible ? "block" : "none";
         lbl.style.display = visible ? "block" : "none";
@@ -242,9 +272,15 @@
         var isPractice = !!opts.isPractice;
         if (!isPractice) currentTrial += 1;
         trialActive = true;
+        trialIsPractice = isPractice;
         trialStartSimSec = simTimeSec;
         trialElapsedSimSec = 0;
-        if (!isPractice) refreshCompassForTrial(currentTrial);
+        if (isPractice) {
+          window.SUBT.compassGoal = opts.goal || null;
+          window.SUBT.compassTakeover = opts.takeover || null;
+        } else {
+          refreshCompassForTrial(currentTrial);
+        }
         if (opts.condition === "R") {
           if (typeof window.SUBT.setJoystickManual === "function") window.SUBT.setJoystickManual(false);
           this.setJoystickVisible(false);
@@ -252,26 +288,31 @@
           this.setJoystickVisible(true);
           if (typeof window.SUBT.setJoystickManual === "function") window.SUBT.setJoystickManual(false);
         }
+        var beforeAdvanceSimSec = simTimeSec;
         pulse();
         if (trialStartSimSec == null && simTimeSec != null) trialStartSimSec = simTimeSec;
         if (isPractice) trialLbl.textContent = opts.label || "Practice";
         else setTrialLabel(currentTrial);
-        showOverlay(isPractice ? "Starting " + (opts.label || "practice") + "..." : "Starting trial " + currentTrial + "...");
-        waitForViewerSettled(function () {
-          hideOverlay();
-          if (done) done();
+        showOverlay(isPractice ? "Preparing " + (opts.label || "practice") + "..." : "Starting trial " + currentTrial + "...");
+        waitForFreshSimTick(beforeAdvanceSimSec, function () {
+          waitForViewerSettled(function () {
+            hideOverlay();
+            if (done) done();
+          });
         });
         return true;
       },
       stopTrial: function (done) {
         if (!trialActive) { if (done) done(); return false; }
         pulse();
+        var wasPractice = trialIsPractice;
         trialActive = false;
+        trialIsPractice = false;
         if (simTimeSec != null && trialStartSimSec != null) {
           trialElapsedSimSec = Math.max(0, simTimeSec - trialStartSimSec);
         }
-        showOverlay("Preparing next step...");
-        setTimeout(function () { if (done) done(); }, transitionMs);
+        if (wasPractice) expectNextSim();
+        if (done) done();
         return true;
       },
       simTimeSec: function () { return simTimeSec; },
