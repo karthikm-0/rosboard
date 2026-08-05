@@ -58,7 +58,7 @@ $(() => {
 });
 
 setInterval(() => {
-  if(currentTransport && subtViewerActive() && !currentTransport.isConnected()) {
+  if(currentTransport && !currentTransport.isConnected()) {
     console.log("attempting to reconnect ...");
     currentTransport.connect();
   }
@@ -81,18 +81,6 @@ function newCard() {
   let card = $("<div></div>").addClass('card')
     .appendTo($('.grid'));
   return card;
-}
-
-function newTopicCard(topicName) {
-  let card = newCard();
-  if(topicName) card.attr("data-topic", topicName);
-  return card;
-}
-
-function gridMasonry(method, arg) {
-  if(!$grid || !$grid.length || !$grid.data("masonry")) return;
-  if(arg !== undefined) $grid.masonry(method, arg);
-  else $grid.masonry(method);
 }
 
 let onOpen = function() {
@@ -160,116 +148,17 @@ let onMsg = function(msg) {
 
 let currentTopics = {};
 let currentTopicsStr = "";
-let subtViewerReadyCallbacks = [];
-
-function subtViewerActive() {
-  return !(window.SUBT && window.SUBT.lockdown && window.SUBT.viewerActive === false);
-}
-
-function subtViewerReady() {
-  if(!(window.SUBT && window.SUBT.whitelist && subtViewerActive())) return false;
-  return window.SUBT.whitelist.every(t => subscriptions[t.topicName] && subscriptions[t.topicName].viewer);
-}
-
-function subtWhitelistedTopicNames() {
-  if(!(window.SUBT && window.SUBT.whitelist)) return new Set();
-  return new Set(window.SUBT.whitelist.map(t => t.topicName));
-}
-
-function subtRemoveOrphanCards() {
-  if(!(window.SUBT && window.SUBT.lockdown)) return;
-  let allowed = subtWhitelistedTopicNames();
-  $(".grid .card").each(function() {
-    let topicName = $(this).attr("data-topic");
-    if(!topicName || !allowed.has(topicName)) {
-      $(this).remove();
-    }
-  });
-  gridMasonry("layout");
-}
-
-function subtNotifyViewerReady() {
-  if(!subtViewerReady()) return;
-  let callbacks = subtViewerReadyCallbacks.slice();
-  subtViewerReadyCallbacks = [];
-  callbacks.forEach(cb => {
-    try { cb(); } catch(e) {}
-  });
-}
-
-function removeSubscription(topicName) {
-  if(!subscriptions[topicName]) return;
-  if(currentTransport && currentTransport.isConnected()) currentTransport.unsubscribe({topicName: topicName});
-  if(subscriptions[topicName].viewer) {
-    let card = subscriptions[topicName].viewer.card;
-    try { subscriptions[topicName].viewer.destroy(); } catch(e) {}
-    if($grid && card) {
-      gridMasonry("remove", card);
-      gridMasonry("layout");
-    } else if(card) {
-      card.remove();
-    }
-  }
-  delete(subscriptions[topicName]);
-  updateStoredSubscriptions();
-}
-
-function subtSyncViewerSubscriptions() {
-  if(!(window.SUBT && window.SUBT.whitelist)) return;
-  if(window.SUBT.lockdown) {
-    let allowed = subtWhitelistedTopicNames();
-    Object.keys(subscriptions).forEach(topicName => {
-      if(!allowed.has(topicName)) removeSubscription(topicName);
-    });
-    subtRemoveOrphanCards();
-  }
-  if(!subtViewerActive()) {
-    window.SUBT.whitelist.forEach(t => removeSubscription(t.topicName));
-    return;
-  }
-  if(!currentTransport) {
-    initDefaultTransport();
-    return;
-  }
-  window.SUBT.whitelist.forEach(t => {
-    let serverType = currentTopics[t.topicName];
-    if(serverType && !subscriptions[t.topicName]) {
-      initSubscribe({topicName: t.topicName, topicType: serverType});
-    }
-  });
-}
-
-if(window.SUBT) {
-  window.SUBT.setViewerActive = function(active) {
-    window.SUBT.viewerActive = !!active;
-    subtSyncViewerSubscriptions();
-    subtNotifyViewerReady();
-  };
-  window.SUBT.onViewerReady = function(cb, timeoutMs) {
-    if(subtViewerReady()) {
-      setTimeout(cb, 0);
-      return;
-    }
-    subtViewerReadyCallbacks.push(cb);
-    if(timeoutMs) {
-      setTimeout(function() {
-        let idx = subtViewerReadyCallbacks.indexOf(cb);
-        if(idx >= 0) {
-          subtViewerReadyCallbacks.splice(idx, 1);
-          cb();
-        }
-      }, timeoutMs);
-    }
-  };
-}
 
 let onTopics = function(topics) {
-  currentTopics = topics;
   // SubT: auto-subscribe the whitelisted topics as soon as the server advertises
   // them, so the fixed participant view (camera + scan) loads deterministically.
   if (window.SUBT && window.SUBT.whitelist) {
-    subtSyncViewerSubscriptions();
-    subtNotifyViewerReady();
+    window.SUBT.whitelist.forEach(t => {
+      let serverType = topics[t.topicName];
+      if (serverType && !subscriptions[t.topicName]) {
+        initSubscribe({topicName: t.topicName, topicType: serverType});
+      }
+    });
   }
 
   // SubT: read-only background subscription to the orient topic (no visible
@@ -292,6 +181,7 @@ let onTopics = function(topics) {
   // native optimization of JSON.stringify
   let newTopicsStr = JSON.stringify(topics);
   if(newTopicsStr === currentTopicsStr) return;
+  currentTopics = topics;
   currentTopicsStr = newTopicsStr;
   
   let topicTree = treeifyPaths(Object.keys(topics));
@@ -378,10 +268,9 @@ function initSubscribe({topicName, topicType}) {
       topicType: topicType,
     }
   }  
-  let maxUpdateRate = (window.SUBT && window.SUBT.viewerMaxUpdateRateHz) || 24.0;
-  currentTransport.subscribe({topicName: topicName, maxUpdateRate: maxUpdateRate});
+  currentTransport.subscribe({topicName: topicName});
   if(!subscriptions[topicName].viewer) {
-    let card = newTopicCard(topicName);
+    let card = newCard();
     let viewer = Viewer.getDefaultViewerForType(topicType);
     try {
       subscriptions[topicName].viewer = new viewer(card, topicName, topicType);
@@ -389,8 +278,8 @@ function initSubscribe({topicName, topicType}) {
       console.log(e);
       card.remove();
     }
-    gridMasonry("appended", card);
-    gridMasonry("layout");
+    $grid.masonry("appended", card);
+    $grid.masonry("layout");
   }
   updateStoredSubscriptions();
 }
@@ -448,9 +337,7 @@ function versionCheck(currentVersionText) {
 
 $(() => {
   if(window.location.href.indexOf("rosboard.com") === -1) {
-    if(!(window.SUBT && window.SUBT.studyFlow && window.SUBT.studyFlow.enabled && !subtViewerActive())) {
-      initDefaultTransport();
-    }
+    initDefaultTransport();
   }
 });
 
@@ -461,8 +348,8 @@ Viewer.onClose = function(viewerInstance) {
   let topicName = viewerInstance.topicName;
   let topicType = viewerInstance.topicType;
   currentTransport.unsubscribe({topicName:topicName});
-  gridMasonry("remove", viewerInstance.card);
-  gridMasonry("layout");
+  $grid.masonry("remove", viewerInstance.card);
+  $grid.masonry("layout");
   delete(subscriptions[topicName].viewer);
   delete(subscriptions[topicName]);
   updateStoredSubscriptions();
@@ -477,3 +364,5 @@ Viewer.onSwitchViewer = (viewerInstance, newViewerType) => {
   delete(subscriptions[topicName].viewer);
   subscriptions[topicName].viewer = new newViewerType(card, topicName, topicType);
 };
+
+
