@@ -129,6 +129,7 @@
     // --- state ---
     var score = 0, hits = 0, misses = 0;
     var startMs = Date.now();
+    var gameMs = Math.max(0, Number(opts.durationMs || GAME_MS));
     var running = true;
     var spawnTimer = null;
 
@@ -209,7 +210,7 @@
     function tick() {
       if (!running) return;
       updateHud();
-      if (Date.now() - startMs >= GAME_MS) return endGame();
+      if (Date.now() - startMs >= gameMs) return endGame();
       requestAnimationFrame(tick);
     }
 

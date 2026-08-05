@@ -153,6 +153,9 @@ window.SUBT = {
     // false, Next → immediately starts the next trial (previous behavior).
     // Study-design toggle -- flip while iterating without touching the runner.
     minigameBetweenTrials: true,
+    // Debug/local testing only. Null uses the minigame default. Can also be
+    // overridden in the URL with ?whackamole_seconds=N.
+    whackamoleDebugDurationMs: null,
   },
 
   // High-level participant procedure: consent, instructions, whack-a-mole

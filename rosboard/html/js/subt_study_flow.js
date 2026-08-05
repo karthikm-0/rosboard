@@ -313,7 +313,17 @@
   }
 
   function trialWhackamoleOptions(trialNumber) {
-    return { seed: "operator-readiness-trial-" + String(trialNumber) };
+    var expCfg = (window.SUBT && window.SUBT.experiment) || {};
+    var qp = new URLSearchParams(location.search);
+    var durationMs = expCfg.whackamoleDebugDurationMs;
+    if (qp.has("whackamole_seconds")) {
+      durationMs = Number(qp.get("whackamole_seconds")) * 1000;
+    }
+    var opts = { seed: "operator-readiness-trial-" + String(trialNumber) };
+    if (durationMs != null && isFinite(durationMs)) {
+      opts.durationMs = Math.max(0, durationMs);
+    }
+    return opts;
   }
 
   function formatSeconds(t) {
