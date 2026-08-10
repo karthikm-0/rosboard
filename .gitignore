@@ -1,1 +1,4 @@
 __pycache__
+
+# Ignore assets folder
+rosboard/html/assets/*

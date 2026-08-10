@@ -26,9 +26,15 @@ from rosboard.subscribers.processes_subscriber import ProcessesSubscriber
 from rosboard.subscribers.system_stats_subscriber import SystemStatsSubscriber
 from rosboard.subscribers.dummy_subscriber import DummySubscriber
 from rosboard.handlers import ROSBoardSocketHandler, NoCacheStaticFileHandler
+from rosboard.segment_playback import make_handlers as make_segment_handlers
 
 class ROSBoardNode(object):
     instance = None
+
+    # A backward header-stamp jump smaller than this is treated as frames
+    # arriving out of order and dropped; anything larger is a real restart
+    # (bag seek, or a new segment beginning) and resets the reference.
+    STAMP_RESET_SEC = 3.0
     def __init__(self, node_name = "rosboard_node"):
         self.__class__.instance = self
         rospy.init_node(node_name)
@@ -54,6 +60,11 @@ class ROSBoardNode(object):
         # dict of topic_name -> float (time in seconds)
         self.last_data_times_by_topic = {}
 
+        # newest header stamp already broadcast per topic, used to discard
+        # frames whose conversion finished out of order (see on_ros_msg).
+        # dict of topic_name -> float (message header stamp in seconds)
+        self.last_stamp_by_topic = {}
+
         if rospy.__name__ == "rospy2":
             # ros2 hack: need to subscribe to at least 1 topic
             # before dynamic subscribing will work later.
@@ -65,7 +76,14 @@ class ROSBoardNode(object):
             'static_path': os.path.join(os.path.dirname(os.path.realpath(__file__)), 'html')
         }
 
-        tornado_handlers = [
+        # Segment replay: lists recorded bags and drives `ros2 bag play`.
+        # Replayed topics come back on the live graph, so the existing viewers
+        # render them with no changes. Registered before the catch-all static
+        # route, which would otherwise swallow /segments/*.
+        self.segment_dir = rospy.get_param("~segment_dir", "")
+        segment_routes, self.segment_player = make_segment_handlers(self.segment_dir or None)
+
+        tornado_handlers = segment_routes + [
                 (r"/rosboard/v1", ROSBoardSocketHandler, {
                     "node": self,
                 }),
@@ -371,11 +389,47 @@ class ROSBoardNode(object):
         # log last time we received data on this topic
         self.last_data_times_by_topic[topic_name] = t
 
+        # Drop frames that finished conversion out of order.
+        #
+        # ros2dict() above does the expensive work (JPEG encode for images)
+        # inside this callback. Under a multi-threaded executor a slow frame
+        # can be overtaken by the next one, so the add_callback() order below
+        # is completion order, not capture order. The browser renders whatever
+        # arrives, so an overtaken frame shows the scene jumping backwards --
+        # during bag replay that reads as the robot oscillating.
+        #
+        # A large backward step is a legitimate restart (seek, or a new
+        # segment starting), so only small regressions are treated as
+        # reordering; anything bigger resets the reference.
+        stamp = self._header_stamp(ros_msg_dict)
+        if stamp is not None:
+            with self.lock:
+                last = self.last_stamp_by_topic.get(topic_name)
+                # `<=` also discards repeats of a stamp already sent. Recorded
+                # streams carry roughly 3.5 duplicate messages per distinct
+                # frame, which arrive in bursts; forwarding them spends the
+                # frame budget on redundant copies and makes playback lurch
+                # between bursts and gaps.
+                if last is not None and 0.0 <= last - stamp < self.STAMP_RESET_SEC:
+                    return
+                self.last_stamp_by_topic[topic_name] = stamp
+
         # broadcast it to the listeners that care
         self.event_loop.add_callback(
             ROSBoardSocketHandler.broadcast,
             [ROSBoardSocketHandler.MSG_MSG, ros_msg_dict]
         )
+
+    @staticmethod
+    def _header_stamp(ros_msg_dict):
+        """Return the message's header stamp in seconds, or None if untimed."""
+        stamp = (ros_msg_dict.get("header") or {}).get("stamp")
+        if not isinstance(stamp, dict):
+            return None
+        try:
+            return float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) * 1e-9
+        except (TypeError, ValueError):
+            return None
 
 def main(args=None):
     ROSBoardNode().start()

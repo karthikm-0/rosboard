@@ -179,6 +179,30 @@ window.SUBT.isWhitelisted = function (topicName) {
   return window.SUBT.whitelist.some(t => t.topicName === topicName);
 };
 
+// Observer condition: a picker that replays recorded segments server-side via
+// `ros2 bag play`. The replayed topics arrive on the live graph, so the same
+// viewers above render them. Turn this off for the driving condition -- a
+// participant who is meant to drive should never see a transport control.
+// The session's condition, served by rosboard from the container's CONDITION
+// env var (see /subt_env.js). "video" means no simulator is running at all.
+window.SUBT.condition = (window.SUBT_ENV && window.SUBT_ENV.condition) || "sim";
+window.SUBT.isVideo = window.SUBT.condition === "video";
+
+// Nothing to drive in the video condition, so the joystick would be a control
+// that silently does nothing. Turn it off rather than show a dead interface.
+if (window.SUBT.isVideo && window.SUBT.joystick) {
+  window.SUBT.joystick.enabled = false;
+}
+
+// enabled: "auto" (default) shows the picker only when the container was
+// launched with CONDITION=video -- the same switch that decides whether a sim
+// runs at all. Set true/false to force it regardless of condition.
+window.SUBT.replay = {
+  enabled: "auto",
+  pollMs: 500,
+  loop: false,
+};
+
 // In lockdown, hide the topic drawer + its toggle so users can't add views.
 if (window.SUBT.lockdown) {
   var subtStyle = document.createElement("style");

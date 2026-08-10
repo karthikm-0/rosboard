@@ -22,6 +22,8 @@
 	      <script type="text/javascript" src="js/gl-matrix.js"></script>
 	      <script type="text/javascript" src="js/litegl.min.js"></script>
         <!-- SubT customization: config must run before index.js (both defer = in order) -->
+        <!-- server-provided session env (CONDITION); must precede subt_config.js -->
+        <script type="text/javascript" src="/subt_env.js" defer></script>
         <script type="text/javascript" src="js/subt_config.js" defer></script>
         <!-- same-browser duplicate-tab guard: sets window.SUBT.duplicateTab -->
         <script type="text/javascript" src="js/subt_duplicate_guard.js" defer></script>
@@ -41,6 +43,8 @@
         <script type="text/javascript" src="js/subt_minigame.js" defer></script>
         <!-- participant-facing consent/instructions/practice/questionnaire flow -->
         <script type="text/javascript" src="js/subt_study_flow.js" defer></script>
+        <!-- observer condition: pick a recorded segment and replay it -->
+        <script type="text/javascript" src="js/subt_replay.js" defer></script>
 
         <title>ROSboard</title>
     </head>

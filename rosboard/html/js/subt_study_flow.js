@@ -428,7 +428,42 @@
     }); });
   }
 
+  // In the video condition there is no simulator, so a "robot practice" step
+  // has to be the same rehearsal through the video interface rather than a
+  // live drive. The flow, its buttons and its ordering are unchanged; only the
+  // medium differs, so a participant never sees a sim in a video session.
+  function runVideoPractice(step) {
+    return new Promise(function (resolve) {
+      hideExperimentOverlay();
+      hideShell();
+      activateViewer().then(function () {
+        hideExperimentOverlay();
+        var name = (step.videoSegment
+          || (window.SUBT.getSelectedSegment && window.SUBT.getSelectedSegment()));
+        var started = name
+          ? fetch("/segments/play", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: name }),
+            }).catch(function () {})
+          : Promise.resolve();
+
+        started.then(function () {
+          waitForTrialButton(step.stopLabel || "End Practice").then(function () {
+            fetch("/segments/stop", { method: "POST" })
+              .catch(function () {})
+              .then(function () {
+                setViewerActive(false);
+                resolve();
+              });
+          });
+        });
+      });
+    });
+  }
+
   function runRobotPractice(step, order) {
+    if (window.SUBT.isVideo) return runVideoPractice(step);
     var condition = step.condition || getCondition(order, step.conditionSlot);
     return waitForRobotReady().then(function () { return new Promise(function (resolve) {
       hideExperimentOverlay();
