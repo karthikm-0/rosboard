@@ -210,8 +210,28 @@
     function tick() {
       if (!running) return;
       updateHud();
-      if (Date.now() - startMs >= gameMs) return endGame();
+      // End only when BOTH the timer has elapsed AND (if a waitFor was
+      // passed) the caller says it's ready. Otherwise moles keep popping.
+      if (Date.now() - startMs >= gameMs && waitForResolved) return endGame();
       requestAnimationFrame(tick);
+    }
+
+    // If the caller passed opts.waitFor (a promise), the game keeps running
+    // past its scheduled end until that promise resolves -- moles keep
+    // popping so the participant stays engaged and gets pulled out mid-play
+    // the instant the sim is ready. Reason: this study is about operator
+    // UN-readiness -- a "Get ready" message defeats the point.
+    var waitForResolved = false;
+    if (opts.waitFor && typeof opts.waitFor.then === "function") {
+      opts.waitFor.then(function () {
+        console.log("[minigame] waitFor resolved -- game can end when timer done");
+        waitForResolved = true;
+      }, function () {
+        console.log("[minigame] waitFor rejected -- game can end when timer done");
+        waitForResolved = true;
+      });
+    } else {
+      waitForResolved = true;
     }
 
     function finish() {

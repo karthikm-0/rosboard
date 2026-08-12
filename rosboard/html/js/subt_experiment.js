@@ -184,12 +184,41 @@
       beginReadinessPolling();
     }
 
-    function waitForViewerSettled(done) {
-      // Do not subscribe to camera/lidar through rosbridge here. The participant
-      // viewer already receives those streams through rosboard's throttled
-      // transport; duplicating them through rosbridge makes joystick control lag.
-      setTimeout(done, cfg.viewerSettleMs || 1200);
+    // Wait until EVERY whitelisted sensor topic has published a fresh message
+    // (measured after now). Only then is "trial ready" -- the previous
+    // approach (fixed 1.2s wait) fired the done callback even when no data
+    // had arrived, so the participant saw a spinning "waiting for data" card
+    // or blank sensor view under the minigame overlay.
+    //
+    // Subscription is short-lived: we unsubscribe as soon as one message
+    // arrives per topic. Small extra WS traffic (one message per topic per
+    // trial start) is worth it -- the alternative is guessing.
+    // Safety cap: if any topic doesn't publish within safetyMs, we give up
+    // and call done anyway so trials can never permanently hang.
+    function waitForFreshSensorFrames(done) {
+      var wl = whitelist;
+      var safetyMs = cfg.sensorReadySafetyMs || 15000;
+      if (!wl.length || !connected) { setTimeout(done, 200); return; }
+      var pending = wl.length, called = false;
+      function fin() { if (called) return; called = true; done(); }
+      var subs = [];
+      var timer = setTimeout(function () {
+        subs.forEach(function (s) { try { s.unsubscribe(); } catch (e) { } });
+        fin();
+      }, safetyMs);
+      wl.forEach(function (t) {
+        var sub = new ROSLIB.Topic({
+          ros: ros, name: t.topicName, messageType: t.topicType,
+          throttle_rate: 500,        // rate-limit; we only need ONE frame each
+        });
+        subs.push(sub);
+        sub.subscribe(function () {
+          try { sub.unsubscribe(); } catch (e) { }
+          if (--pending === 0) { clearTimeout(timer); fin(); }
+        });
+      });
     }
+    function waitForViewerSettled(done) { waitForFreshSensorFrames(done); }
 
     function waitForFreshSimTick(before, done) {
       if (before == null && simTimeSec != null) {
@@ -307,10 +336,16 @@
         if (trialStartSimSec == null && simTimeSec != null) trialStartSimSec = simTimeSec;
         if (isPractice) trialLbl.textContent = opts.label || "Practice";
         else setTrialLabel(currentTrial);
-        showOverlay(isPractice ? "Preparing " + (opts.label || "practice") + "..." : "Starting trial " + currentTrial + "...");
+        // opts.noOverlay=true: caller is showing its own coverage (e.g. the
+        // whackamole overlay during the minigame->trial transition) and does
+        // not want the "Starting trial N" overlay to peek through when the
+        // caller's overlay dismisses.
+        if (!opts.noOverlay) {
+          showOverlay(isPractice ? "Preparing " + (opts.label || "practice") + "..." : "Starting trial " + currentTrial + "...");
+        }
         waitForFreshSimTick(beforeAdvanceSimSec, function () {
           waitForViewerSettled(function () {
-            hideOverlay();
+            if (!opts.noOverlay) hideOverlay();
             if (done) done();
           });
         });

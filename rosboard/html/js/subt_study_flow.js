@@ -277,11 +277,17 @@
     }
   }
 
-  function waitForRobotReady() {
+  function waitForRobotReady(opts) {
+    opts = opts || {};
     return new Promise(function (resolve) {
       if (!(window.SUBT && window.SUBT.experimentController)) return resolve();
       if (window.SUBT.experimentController.isReady()) return resolve();
-      window.SUBT.experimentController.showOverlay("Preparing simulation...");
+      // Silent: caller (e.g. runTrialSet's parallel path) is showing its own
+      // coverage (the whackamole). Skipping this overlay avoids the stale
+      // "Preparing simulation..." leaking through when the whackamole ends.
+      if (!opts.silent) {
+        window.SUBT.experimentController.showOverlay("Preparing simulation...");
+      }
       window.SUBT.experimentController.onReady(resolve);
     });
   }
@@ -409,38 +415,45 @@
     return showContent("content/trial_issue_questions.html", { collect: "trial_issue" });
   }
 
-  function runRobotTrial(condition, label) {
-    return waitForRobotReady().then(function () { return new Promise(function (resolve) {
+  // onSetupDone (optional): fires when the sim setup phase completes (readiness
+  // + viewer activation + startTrial's done). Used by runTrialSet to keep the
+  // whackamole overlay up until the real sim is ready, so the participant
+  // never sees a "Starting trial N" gap. When provided, the readiness overlay
+  // and startTrial's own overlay are both suppressed (whackamole is covering).
+  function runRobotTrial(condition, label, onSetupDone) {
+    var silent = typeof onSetupDone === "function";
+    return waitForRobotReady({ silent: silent }).then(function () { return new Promise(function (resolve) {
       hideShell();
       activateViewer().then(function () {
-        window.SUBT.experimentController.startTrial({ condition: condition }, function () {
-        var clock = null;
-        var lastElapsed = 0;
-        if (condition === "R") {
-          clock = document.createElement("div");
-          clock.className = "subt-flow-clock";
-          document.body.appendChild(clock);
-          var tick = function () {
-            if (!clock) return;
-            lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
-            clock.textContent = "Elapsed: " + formatSeconds(lastElapsed);
-            requestAnimationFrame(tick);
-          };
-          tick();
-        }
-        waitForTrialButton(condition === "R" ? "Stop Scenario" : "End Robot Trial").then(function () {
-          if (clock) { clock.remove(); clock = null; }
-          hideShell();
-          window.SUBT.experimentController.stopTrial(function () {
-            setViewerActive(false);
-            var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
-            var afterStop = condition === "R" && reportWhenReadySliderEnabled()
-              ? showReportWhenReadyQuestion(elapsed)
-              : Promise.resolve();
-            afterStop.then(issueQuestions).then(resolve);
+        window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent }, function () {
+          if (silent) { try { onSetupDone(); } catch (e) {} }
+          var clock = null;
+          var lastElapsed = 0;
+          if (condition === "R") {
+            clock = document.createElement("div");
+            clock.className = "subt-flow-clock";
+            document.body.appendChild(clock);
+            var tick = function () {
+              if (!clock) return;
+              lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
+              clock.textContent = "Elapsed: " + formatSeconds(lastElapsed);
+              requestAnimationFrame(tick);
+            };
+            tick();
+          }
+          waitForTrialButton(condition === "R" ? "Stop Scenario" : "End Robot Trial").then(function () {
+            if (clock) { clock.remove(); clock = null; }
+            hideShell();
+            window.SUBT.experimentController.stopTrial(function () {
+              setViewerActive(false);
+              var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
+              var afterStop = condition === "R" && reportWhenReadySliderEnabled()
+                ? showReportWhenReadyQuestion(elapsed)
+                : Promise.resolve();
+              afterStop.then(issueQuestions).then(resolve);
+            });
           });
         });
-      });
       });
     }); });
   }
@@ -537,15 +550,30 @@
         p = p.then(function () {
           return new Promise(function (resolve) {
             hideShell();
+            // Start the trial's setup NOW (in the background). runRobotTrial
+            // returns a promise for the FULL trial (setup + participant end +
+            // questions). It invokes onSetupDone as soon as its own setup
+            // phase completes (readiness + viewer active + first pulse done).
+            // The minigame stays up until both its timer runs out AND
+            // onSetupDone fires -- so the "Starting trial N" overlay never
+            // shows and there's no visible gap into the trial view.
+            var setupDone;
+            var setupPromise = new Promise(function (r) { setupDone = r; });
+            var trialFullPromise = runRobotTrial(condition, "Robot Trial " + n, setupDone);
+
             if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
               var current = window.SUBT.experimentController.currentTrial();
-              window.SUBT.showMinigame(resolve, trialWhackamoleOptions(current + 1));
+              var opts = trialWhackamoleOptions(current + 1);
+              opts.waitFor = setupPromise;
+              window.SUBT.showMinigame(function () {
+                // Minigame gone, sim visible. Wait for the participant to
+                // finish the trial (end-button + stop + questions).
+                trialFullPromise.then(resolve);
+              }, opts);
             } else {
-              resolve();
+              trialFullPromise.then(resolve);
             }
           });
-        }).then(function () {
-          return runRobotTrial(condition, "Robot Trial " + n);
         });
       })(i + 1);
     }
