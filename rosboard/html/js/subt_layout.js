@@ -17,13 +17,27 @@
     if (typeof Viewer === "undefined") return false;
     if (Viewer.prototype.__subtLayoutPatched) return true;
     Viewer.prototype.__subtLayoutPatched = true;
+    function tagCard(viewer) {
+      if (viewer.card && viewer.topicName) {
+        viewer.card.attr("data-topic", viewer.topicName);
+      }
+    }
     var orig = Viewer.prototype.onCreate;
     Viewer.prototype.onCreate = function () {
       if (orig) orig.call(this);
-      if (this.card && this.topicName) {
-        this.card.attr("data-topic", this.topicName);
-      }
+      tagCard(this);
     };
+
+    // Space3DViewer overrides onCreate without calling super.onCreate(), so
+    // lidar cards would otherwise miss data-topic. Patch it too when present.
+    if (typeof Space3DViewer !== "undefined" && !Space3DViewer.prototype.__subtLayoutPatched) {
+      Space3DViewer.prototype.__subtLayoutPatched = true;
+      var orig3d = Space3DViewer.prototype.onCreate;
+      Space3DViewer.prototype.onCreate = function () {
+        if (orig3d) orig3d.call(this);
+        tagCard(this);
+      };
+    }
     return true;
   }
   if (!patchViewer()) {

@@ -42,6 +42,10 @@
     return order[Math.max(0, slot - 1)] || order[0] || "D";
   }
 
+  function reportWhenReadySliderEnabled() {
+    return cfg.reportWhenReadySliderEnabled === true;
+  }
+
   function variantFor(slot) {
     return slot === 1 ? "first-seen" : "second-seen";
   }
@@ -419,7 +423,9 @@
           window.SUBT.experimentController.stopTrial(function () {
             setViewerActive(false);
             var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
-            var afterStop = condition === "R" ? showReportWhenReadyQuestion(elapsed) : Promise.resolve();
+            var afterStop = condition === "R" && reportWhenReadySliderEnabled()
+              ? showReportWhenReadyQuestion(elapsed)
+              : Promise.resolve();
             afterStop.then(issueQuestions).then(resolve);
           });
         });
@@ -463,7 +469,7 @@
   }
 
   function runRobotPractice(step, order) {
-    if (window.SUBT.isVideo) return runVideoPractice(step);
+    if (window.SUBT.isReplay) return runVideoPractice(step);
     var condition = step.condition || getCondition(order, step.conditionSlot);
     return waitForRobotReady().then(function () { return new Promise(function (resolve) {
       hideExperimentOverlay();

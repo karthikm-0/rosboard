@@ -561,6 +561,42 @@ class SegmentTransportHandler(_BaseHandler):
                      200 if ok else 409)
 
 
+class PathSaveHandler(_BaseHandler):
+    """Persist a participant-drawn path from the replay/draw condition."""
+
+    def post(self):
+        try:
+            body = json.loads(self.request.body or b'{}')
+        except ValueError:
+            return self.respond({'ok': False, 'error': 'Malformed JSON'}, 400)
+
+        points = body.get('points') or []
+        if not isinstance(points, list) or not points:
+            return self.respond({'ok': False, 'error': 'No drawn points'}, 400)
+
+        out_dir = os.path.expanduser(
+            os.environ.get('SUBT_DRAW_DIR') or '~/subt_run_data/drawn_paths')
+        os.makedirs(out_dir, exist_ok=True)
+        stamp = time.strftime('%Y%m%d_%H%M%S')
+        segment = str(body.get('segment') or 'unknown').replace('/', '_')
+        filename = '{}_{}_path.json'.format(stamp, segment)
+        path = os.path.join(out_dir, filename)
+        payload = {
+            'saved_at': time.time(),
+            'condition': os.environ.get('CONDITION', 'sim'),
+            'segment': body.get('segment'),
+            'topic': body.get('topic'),
+            'canvas': body.get('canvas'),
+            'points': points,
+        }
+        try:
+            with open(path, 'w', encoding='utf-8') as handle:
+                json.dump(payload, handle, indent=2)
+        except OSError as exc:
+            return self.respond({'ok': False, 'error': str(exc)}, 500)
+        self.respond({'ok': True, 'path': path, 'count': len(points)})
+
+
 class SubtEnvHandler(tornado.web.RequestHandler):
     """Serve the session's condition as a synchronously-loadable script.
 
@@ -594,5 +630,6 @@ def make_handlers(segment_dir=None):
         (r'/segments/toggle', SegmentTransportHandler, {'player': player, 'action': 'toggle'}),
         (r'/segments/seek', SegmentTransportHandler, {'player': player, 'action': 'seek'}),
         (r'/segments/rate', SegmentTransportHandler, {'player': player, 'action': 'rate'}),
+        (r'/paths/save', PathSaveHandler, {'player': player}),
     ]
     return routes, player

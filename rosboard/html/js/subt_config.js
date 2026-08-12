@@ -187,10 +187,12 @@ window.SUBT.isWhitelisted = function (topicName) {
 // env var (see /subt_env.js). "video" means no simulator is running at all.
 window.SUBT.condition = (window.SUBT_ENV && window.SUBT_ENV.condition) || "sim";
 window.SUBT.isVideo = window.SUBT.condition === "video";
+window.SUBT.isDraw = window.SUBT.condition === "draw";
+window.SUBT.isReplay = window.SUBT.isVideo || window.SUBT.isDraw;
 
 // Nothing to drive in the video condition, so the joystick would be a control
 // that silently does nothing. Turn it off rather than show a dead interface.
-if (window.SUBT.isVideo && window.SUBT.joystick) {
+if (window.SUBT.isReplay && window.SUBT.joystick) {
   window.SUBT.joystick.enabled = false;
 }
 
