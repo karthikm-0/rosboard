@@ -156,6 +156,13 @@ window.SUBT = {
     // Debug/local testing only. Null uses the minigame default. Can also be
     // overridden in the URL with ?whackamole_seconds=N.
     whackamoleDebugDurationMs: null,
+    // Debug fast-forward mode. When true (or URL has ?debug=1), the study
+    // flow skips all `content` steps (consent, instructions, questionnaires),
+    // both practice steps (whackamole + robot), and clamps whackamole rounds
+    // to 1.5s so trial iteration is fast. Final "finish" step is preserved
+    // so the participant is still released cleanly. LOCAL TESTING ONLY --
+    // never ship this on to Prolific.
+    debugMode: false,
   },
 
   // High-level participant procedure: consent, instructions, whack-a-mole

@@ -316,6 +316,16 @@
     });
   }
 
+  // Debug fast-forward: set via subt_config.js `experiment.debugFast` OR the
+  // `?debug=1` URL param. Skips consent/instruction/questionnaire steps,
+  // skips both practices, and clamps whackamole rounds to 1.5s.
+  function debugMode() {
+    var expCfg = (window.SUBT && window.SUBT.experiment) || {};
+    var qp = new URLSearchParams(location.search);
+    return !!(expCfg.debugFast || qp.get("debug") === "1");
+  }
+  console.log("[study-flow] debugMode:", debugMode(), "url:", location.search);
+
   function trialWhackamoleOptions(trialNumber) {
     var expCfg = (window.SUBT && window.SUBT.experiment) || {};
     var qp = new URLSearchParams(location.search);
@@ -323,6 +333,7 @@
     if (qp.has("whackamole_seconds")) {
       durationMs = Number(qp.get("whackamole_seconds")) * 1000;
     }
+    if (debugMode() && durationMs == null) durationMs = 1500;    // fast default
     var opts = { seed: "operator-readiness-trial-" + String(trialNumber) };
     if (durationMs != null && isFinite(durationMs)) {
       opts.durationMs = Math.max(0, durationMs);
@@ -551,6 +562,27 @@
   function runStep(step, flow, order) {
     if (aborted) return Promise.resolve();
     var total = window.SUBT.experimentController.totalTrials();
+    var fast = debugMode();
+    // In debug fast-forward, skip everything that isn't a real trial. The
+    // final `finish` content step is preserved so the participant is still
+    // released cleanly (broker /release fires + Prolific redirect).
+    if (fast) {
+      var skipTypes = {
+        whackamole_practice: 1,
+        robot_practice: 1,
+        condition_training: 1,      // driving/scenario practice per condition
+        condition_intro: 1,          // task-explanation page
+        set_instructions: 1,         // set intro page
+      };
+      if (skipTypes[step.type]) {
+        console.log("[debugFast] skipping step:", step.type);
+        return Promise.resolve();
+      }
+      if (step.type === "content" && !step.finish) {
+        console.log("[debugFast] skipping content:", step.content);
+        return Promise.resolve();
+      }
+    }
     if (step.type === "content") {
       return showContent(step.content, {
         buttonLabel: step.buttonLabel || (step.finish ? "Finish" : "Next"),
