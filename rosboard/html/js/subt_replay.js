@@ -443,6 +443,17 @@
     return !!(window.SUBT && window.SUBT.viewerActive);
   }
 
+  // Show/hide just the segment DROPDOWN. The scrub bar, play/pause, and skip
+  // buttons stay visible so the participant can still interact with playback
+  // -- only manual segment selection is locked during real video trials.
+  function updateSelectVisibility() {
+    const ec = window.SUBT && window.SUBT.experimentController;
+    const hideSelect = !!(window.SUBT && window.SUBT.isVideo
+      && ec && ec.trialInProgress && ec.trialInProgress()
+      && !ec.trialIsPractice());
+    select.style.display = hideSelect ? "none" : "";
+  }
+
   function updateVisibility() {
     const show = shouldShow();
     panel.style.display = show ? "block" : "none";
@@ -492,6 +503,7 @@
   function install() {
     document.body.appendChild(panel);
     updateVisibility();
+    updateSelectVisibility();
     reposition();
     window.addEventListener("resize", reposition);
     // The grid resizes when cards appear, when a viewer swaps type, or when
@@ -509,6 +521,7 @@
     // viewerActive flips as the flow moves between steps, with no event to
     // listen for, so it is polled. Cheap: a boolean read and a style write.
     setInterval(function () {
+      updateSelectVisibility();
       if (updateVisibility()) reposition();
     }, 250);
     // Only poll once the picker is confirmed to belong on this page; a

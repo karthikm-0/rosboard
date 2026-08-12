@@ -224,6 +224,18 @@
           if (!j) return;
           window.SUBT.compassGoal = j.goal || null;
           window.SUBT.compassTakeover = j.takeover || null;
+          // In video mode, real trials auto-play the segment named after the
+          // trial's config (e.g. "config_5"). The compass geometry above and
+          // the video content stay locked together because both come from the
+          // same trial-info fetch. Manual segment selection in the picker
+          // remains available for practice-mode debugging.
+          if (window.SUBT && window.SUBT.isVideo && j.config_name) {
+            fetch("/segments/play", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: j.config_name }),
+            }).catch(function () {});
+          }
         })
         .catch(function () {});
     }
@@ -252,6 +264,8 @@
     window.SUBT.experimentController = {
       totalTrials: function () { return total; },
       currentTrial: function () { return currentTrial; },
+      trialInProgress: function () { return trialActive; },
+      trialIsPractice: function () { return trialIsPractice; },
       isReady: function () { return simReady; },
       onReady: function (cb) { if (simReady) cb(); else readyCallbacks.push(cb); },
       showOverlay: showOverlay,
