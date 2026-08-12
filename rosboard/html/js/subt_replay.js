@@ -82,11 +82,9 @@
 
   const panel = el("div", {
     position: "fixed",
-    // Placed by reposition() against the card grid, not hard-coded: the cards
-    // are sized in vw, so any fixed offset would drift off-centre as the
-    // window scales.
+    // Placed by reposition() to span the full card-grid width (camera left
+    // edge to lidar right edge). left/width/bottom overwritten there.
     left: "50%",
-    transform: "translateX(-50%)",
     bottom: "16px",
     // Above the study-flow overlay (2147483645) and the practice button
     // (999999). This is a debug control that has to stay reachable even while
@@ -155,6 +153,11 @@
   let scrubbing = false;
   let duration = 0;
   let loadedSegment = null;
+  // While the server is switching segments, its /status still reports the
+  // OLD segment's duration/position for a beat -- if we render off it, the
+  // scrubber jerks against a stale playhead. Set on switch, cleared once
+  // the poll sees the new segment loaded.
+  let pendingSegment = null;
   // Latest playhead, so the skip buttons seek relative to where playback
   // actually is rather than to the last place the handle was dragged.
   let currentPosition = 0;
@@ -171,7 +174,13 @@
   let seekInFlight = false;
   let pendingSeek = null;
   let lastSeekAt = 0;
-  const SEEK_MIN_MS = 120;
+  // Min gap between seek POSTs while dragging. Sized so each scrub burst
+  // (SCRUB_BURST_SIZE = ~150 msgs of camera+lidar+tf+clock through the
+  // GIL-bound rosbridge pipeline) has time to finish before the next fires.
+  // Too small -> bursts pile up, camera and lidar visibly desync. The drag
+  // itself stays live because the thumb + time label update on every
+  // `input` event locally, independent of the seek round-trip.
+  const SEEK_MIN_MS = 500;
 
   function flushSeek() {
     if (seekInFlight || pendingSeek === null) return;
@@ -184,7 +193,9 @@
     pendingSeek = null;
     seekInFlight = true;
     lastSeekAt = now;
-    post("/segments/seek", { offset: offset })
+    const wasScrub = pendingScrub;
+    pendingScrub = false;
+    post("/segments/seek", { offset: offset, scrub: wasScrub })
       .catch(function () {})
       .then(function () {
         seekInFlight = false;
@@ -192,21 +203,49 @@
       });
   }
 
-  function requestSeek(offset) {
+  function requestSeek(offset, scrub) {
     pendingSeek = offset;
+    pendingScrub = !!scrub;                          // pass-through to server
     flushSeek();
   }
+  let pendingScrub = false;
 
+  // YouTube-style scrub:
+  //  - Grabbing the handle pauses playback if it was running (so the video
+  //    isn't advancing under the cursor). Resume is up to the user via play.
+  //  - Every `input` fires a LIGHT seek (scrub=true) -- server does a tiny
+  //    burst so frames update at the handle position, cheaply enough that
+  //    dragging stays smooth even with the camera on.
+  //  - `change` (release) fires a FULL seek (scrub=false) for a clean snap
+  //    with all slow topics (lidar) refreshed.
+  let wasPlayingBeforeScrub = false;
+  let currentlyPaused = true;                       // updated on every /status poll
+  scrub.addEventListener("mousedown", function () {
+    wasPlayingBeforeScrub = !currentlyPaused;
+    if (wasPlayingBeforeScrub) post("/segments/toggle", {}).catch(function () {});
+  });
+  scrub.addEventListener("touchstart", function () {
+    wasPlayingBeforeScrub = !currentlyPaused;
+    if (wasPlayingBeforeScrub) post("/segments/toggle", {}).catch(function () {});
+  }, { passive: true });
   scrub.addEventListener("input", function () {
     scrubbing = true;
     if (!duration) return;
     const offset = (scrub.value / 1000) * duration;
     timeNow.textContent = fmt(offset);
-    requestSeek(offset);
+    requestSeek(offset, true);                       // scrub=true -> tiny burst
   });
   scrub.addEventListener("change", function () {
     scrubbing = false;
-    if (duration) requestSeek((scrub.value / 1000) * duration);
+    if (duration) requestSeek((scrub.value / 1000) * duration, false);   // full burst
+    // Resume playback if the user grabbed the handle while playing. Small
+    // delay so the final seek+burst above lands before the toggle unpauses.
+    if (wasPlayingBeforeScrub) {
+      wasPlayingBeforeScrub = false;
+      setTimeout(function () {
+        post("/segments/toggle", {}).catch(function () {});
+      }, 150);
+    }
   });
 
   // One button for play/pause, as in any video player: it starts the selected
@@ -289,23 +328,49 @@
     }).then((response) => response.json());
   }
 
+  // Kick a segment switch: reset UI immediately, stop old, start new (paused
+  // if requested). Poll will pick up the real state once the server transitions.
+  function loadSegment(name, paused) {
+    if (!name) return;
+    pendingSegment = name;
+    // Zero the scrub UI right now so the playhead doesn't limp across the
+    // OLD segment's timeline while the server unloads it.
+    scrub.value = 0;
+    duration = 0;
+    currentPosition = 0;
+    timeNow.textContent = fmt(0);
+    timeTotal.textContent = fmt(0);
+    scrub.disabled = true;
+    status.textContent = (paused ? "loading " : "starting ") + name + "...";
+    post("/segments/play", { name: name, loop: !!config.loop, paused: !!paused })
+      .then((data) => {
+        if (!data.ok) {
+          status.textContent = "error: " + (data.error || data.message);
+          pendingSegment = null;
+        }
+      })
+      .catch((error) => {
+        status.textContent = "play failed: " + error;
+        pendingSegment = null;
+      });
+  }
+
   function onPlayPause() {
-    // Already loaded -> toggle. Nothing loaded, or a different segment
-    // picked in the dropdown -> start that one.
+    // Already on this segment -> plain toggle. Otherwise start the picked one.
     if (playing && select.value === loadedSegment) {
       post("/segments/toggle", {}).catch(function () {});
       return;
     }
-    if (!select.value) return;
-    status.textContent = "starting " + select.value + "...";
-    post("/segments/play", { name: select.value, loop: !!config.loop })
-      .then((data) => {
-        if (!data.ok) status.textContent = "error: " + (data.error || data.message);
-      })
-      .catch((error) => {
-        status.textContent = "play failed: " + error;
-      });
+    loadSegment(select.value, false);            // play immediately
   }
+
+  // Picking a different segment in the dropdown auto-loads it PAUSED. No need
+  // to press play just to see the switch happen -- the old one unloads right
+  // away, the new one primes at frame 0. Press play (or scrub) to interact.
+  select.addEventListener("change", function () {
+    if (!select.value || select.value === loadedSegment) return;
+    loadSegment(select.value, true);
+  });
 
   function poll() {
     fetch("/segments/status")
@@ -318,9 +383,17 @@
         forwardButton.disabled = !playing;
         scrub.disabled = !playing;
 
+        // During a switch, the server may still report the OLD segment for a
+        // beat. Ignore its numbers until it confirms the pending segment is
+        // loaded -- prevents the playhead from limping on the stale timeline.
+        if (pendingSegment && data.segment !== pendingSegment) {
+          return;
+        }
+        pendingSegment = null;
         if (playing) {
           duration = data.duration || 0;
           currentPosition = data.position || 0;
+          currentlyPaused = !!data.paused;                 // tracked for scrub-pause
           setIcon(playButton, data.paused ? "play" : "pause");
           timeTotal.textContent = fmt(duration);
           // Never fight the user's hand: while dragging, the handle and the
@@ -378,17 +451,40 @@
 
   function reposition() {
     if (panel.style.display === "none") return;
-    const grid = document.querySelector(".grid");
-    if (!grid || !grid.getBoundingClientRect().width) {
+    // Measure the actual card elements, not the .grid container (which
+    // spans the whole page width). Find leftmost and rightmost cards; the
+    // panel spans between their outer edges.
+    const cards = document.querySelectorAll(".grid .card");
+    if (!cards.length) {
       panel.style.left = "50%";
+      panel.style.width = "auto";
+      panel.style.transform = "translateX(-50%)";
       panel.style.top = "auto";
       panel.style.bottom = "16px";
       return;
     }
-    const r = grid.getBoundingClientRect();
+    let minLeft = Infinity, maxRight = -Infinity, maxBottom = 0;
+    cards.forEach(function (c) {
+      const b = c.getBoundingClientRect();
+      if (!b.width) return;                           // hidden / not laid out
+      if (b.left < minLeft) minLeft = b.left;
+      if (b.right > maxRight) maxRight = b.right;
+      if (b.bottom > maxBottom) maxBottom = b.bottom;
+    });
+    if (!isFinite(minLeft) || !isFinite(maxRight)) {
+      panel.style.left = "50%";
+      panel.style.width = "auto";
+      panel.style.transform = "translateX(-50%)";
+      panel.style.top = "auto";
+      panel.style.bottom = "16px";
+      return;
+    }
     const maxTop = window.innerHeight - panel.offsetHeight - 12;
-    const top = Math.min(r.bottom + 12, maxTop);
-    panel.style.left = (r.left + r.width / 2) + "px";
+    const top = Math.min(maxBottom + 12, maxTop);
+    panel.style.left = minLeft + "px";
+    panel.style.width = (maxRight - minLeft) + "px";
+    panel.style.transform = "none";
+    panel.style.boxSizing = "border-box";
     panel.style.top = Math.max(12, top) + "px";
     panel.style.bottom = "auto";
   }

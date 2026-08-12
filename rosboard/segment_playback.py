@@ -105,7 +105,10 @@ class SegmentPlayer(object):
     # Bag time a scrub burst should cover. Long enough to include the slowest
     # displayed topic (the lidar preview, a few Hz), short enough that the
     # playhead barely moves from where the handle was dropped.
-    BURST_SECONDS = 0.6
+    # Bag-seconds emitted per burst -- covers slow topics (lidar ~0.6% of msgs)
+    # but small enough that the resulting camera+lidar+tf spam through the GIL-
+    # bound rosbridge stays under one scrub interval. Halved from 0.6s.
+    BURST_SECONDS = 0.3
 
     # How close to the end counts as "at the end". Must exceed one /clock
     # tick so the guard cannot be stepped over between updates.
@@ -213,7 +216,10 @@ class SegmentPlayer(object):
             # BURST_SECONDS, which is what makes a paused scrub repaint the
             # slow topics (lidar) and not just the camera.
             density = (count / self.duration) if (count and self.duration) else 1000.0
-            self.burst_size = max(50, int(density * self.BURST_SECONDS))
+            # Floor lowered from 50 to 25 -- with camera in the burst, 50 msgs
+            # is already a couple full frames + spam, which is enough to jerk
+            # the scrub. Lidar-only bags may need to raise this back up.
+            self.burst_size = max(25, int(density * self.BURST_SECONDS))
             self.position = 0.0
             self.paused = paused
             self.rate = rate
@@ -334,8 +340,19 @@ class SegmentPlayer(object):
             self.paused = not self.paused
         return True, 'paused' if self.paused else 'playing'
 
-    def seek(self, offset):
-        """Seek to an absolute offset in seconds from the start of the bag."""
+    # Mid-drag scrub burst. Sized larger than one image period so that even if
+    # rosboard's single-threaded img.py compressor drops most frames from the
+    # burst, the LAST camera message in the burst lands cleanly and the view
+    # snaps to the scrub position. Lidar has no compressor and always updates.
+    SCRUB_BURST_SIZE = 300
+
+    def seek(self, offset, scrub=False):
+        """Seek to an absolute offset in seconds from the start of the bag.
+
+        scrub=True means the user is actively dragging the scrubber; the
+        burst is shrunk to SCRUB_BURST_SIZE so mid-drag repaints don't
+        saturate the GIL-bound rosbridge pipeline.
+        """
         try:
             from builtin_interfaces.msg import Time as TimeMsg
             from rosbag2_interfaces.srv import Seek
@@ -358,7 +375,7 @@ class SegmentPlayer(object):
         # the picture. Bursting a short run of messages emits the frames at
         # the new position so the view tracks the drag.
         if self.paused:
-            self._burst_one_frame()
+            self._burst_one_frame(size=self.SCRUB_BURST_SIZE if scrub else None)
             # The burst consumes messages, so it leaves the player ~BURST_SECONDS
             # past where the handle was dropped -- the playhead would creep
             # forward on its own after every paused scrub. Seek back so the
@@ -368,7 +385,7 @@ class SegmentPlayer(object):
             self.position = offset
         return True, 'seek {:.1f}s'.format(offset)
 
-    def _burst_one_frame(self):
+    def _burst_one_frame(self, size=None):
         """Emit a short burst so paused views repaint at the new position.
 
         A burst is used rather than play_next because one message is whatever
@@ -377,13 +394,15 @@ class SegmentPlayer(object):
         the camera is ~2% of messages and the lidar preview ~0.6%, so a small
         burst reliably repaints neither. Covering BURST_SECONDS of bag time
         picks up both while moving the playhead only a fraction of a second.
+        Pass ``size`` to override the density-based default -- used by scrub
+        seeks to keep mid-drag bursts small and cheap.
         """
         try:
             from rosbag2_interfaces.srv import Burst
         except ImportError:
             return
         request = Burst.Request()
-        request.num_messages = self.burst_size
+        request.num_messages = size if size is not None else self.burst_size
         self._call('burst', Burst, request, timeout=2.0)
 
     def set_rate(self, rate):
@@ -527,7 +546,13 @@ class SegmentTransportHandler(_BaseHandler):
         if self.action == 'toggle':
             ok, message = self.player.toggle_paused()
         elif self.action == 'seek':
-            ok, message = self.player.seek(float(body.get('offset', 0.0)))
+            # scrub=true (live drag) uses a tiny burst so mid-drag repaints
+            # stay cheap; scrub=false (release) uses the full burst for a
+            # clean final snap.
+            ok, message = self.player.seek(
+                float(body.get('offset', 0.0)),
+                scrub=bool(body.get('scrub', False)),
+            )
         elif self.action == 'rate':
             ok, message = self.player.set_rate(body.get('rate', 1.0))
         else:
