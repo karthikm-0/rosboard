@@ -170,7 +170,15 @@
       overlay.style.display = "none";
       return;
     }
-    var r = target.getBoundingClientRect();
+    // Use the parent .card's bounding rect, not the canvas's. Space3DViewer
+    // sizes its canvas as a square that matches the card WIDTH -- so on a
+    // 4:3 card the canvas overflows vertically. The card clips it visually
+    // via overflow:hidden, but the canvas's getBoundingClientRect still
+    // reports the taller-than-card size, and the green border would draw
+    // where the canvas thinks it is (off the bottom of the card). Anchoring
+    // to the card makes the border match the visible clipped region.
+    var card = target.closest(".card") || target;
+    var r = card.getBoundingClientRect();
     overlay.style.display = panel.style.display === "none" ? "none" : "block";
     overlay.style.left = r.left + "px";
     overlay.style.top = r.top + "px";
