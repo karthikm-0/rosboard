@@ -133,8 +133,13 @@ def compress_compressed_image(msg, output):
         output["_error"] = "Please install simplejpeg, cv2 (OpenCV), or PIL (pillow) for image support."
         return
 
-    # if message is already in jpeg format and small enough just pass it through
-    if len(msg.data) < 250000 and "jpeg" in msg.format:
+    # If the incoming frame is already JPEG, pass it through as-is. The old
+    # 250K size ceiling forced a per-frame Python decode -> resize -> encode
+    # cycle for anything bigger, which is exactly what makes camera views
+    # laggy at ~1280x960 (single-threaded, GIL-bound). Publishers upstream
+    # (image_transport republish with jpeg_quality:=60) already keep frames
+    # small; the browser handles JPEG decoding natively.
+    if "jpeg" in msg.format:
         output["_data_jpeg"] = base64.b64encode(bytearray(msg.data)).decode()
         return
     
