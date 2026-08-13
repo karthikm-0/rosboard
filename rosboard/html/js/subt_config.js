@@ -9,7 +9,13 @@ window.SUBT = {
     // Camera temporarily disabled to isolate rosboard's throughput -- was
     // ~74 MB/s raw feeding rosboard's Python compressor. Re-enable after
     // shrinking source resolution in subt_gz/models/x1/model.sdf.
-    { topicName: "/X1/front/image_raw", topicType: "sensor_msgs/msg/Image" },
+    // Compressed variant of /X1/front/image_raw. Published by the
+    // image_transport republish node in x1_world.launch.py (raw -> jpeg).
+    // ~10-30x less bandwidth per frame than the raw stream and bypasses
+    // rosboard's single-threaded Python img.py compressor -- the browser
+    // just relays JPEG bytes to the canvas. ImageViewer.js already handles
+    // sensor_msgs/msg/CompressedImage natively.
+    { topicName: "/X1/front/image_raw/compressed", topicType: "sensor_msgs/msg/CompressedImage" },
     // Use the decimated preview cloud (row_stride=2, col_stride=4 = 8x fewer
     // points) instead of the raw /registered_scan. aede_registered_scan_bridge
     // publishes it when publish_lidar_preview:=true in x1_world.launch.py.
@@ -105,7 +111,7 @@ window.SUBT = {
     robotCentric: true,
     rangeM: 10,      // ring radius in metres
     sizePx: 160,     // on-screen diameter of the overlay
-    cameraTopic: "/X1/front/image_raw",  // card to overlay (defaults to the whitelisted Image)
+    cameraTopic: "/X1/front/image_raw/compressed",  // card to overlay (defaults to the whitelisted Image)
     // Goal/takeover markers come from window.SUBT.compassGoal / compassTakeover,
     // set per-trial by subt_experiment.js when it fetches broker /trial-info.
     // No fallback here -- if we don't know the current trial's geometry the
@@ -119,7 +125,7 @@ window.SUBT = {
   // layout across monitors. minCardPx clamps on small screens.
   layout: {
     enabled: true,
-    cameraTopic: "/X1/front/image_raw",
+    cameraTopic: "/X1/front/image_raw/compressed",
     lidarTopic: "/X1/points_preview",
     cameraVw: 33,
     lidarVw: 33,
