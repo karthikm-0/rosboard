@@ -443,15 +443,13 @@
     return !!(window.SUBT && window.SUBT.viewerActive);
   }
 
-  // Show/hide just the segment DROPDOWN. The scrub bar, play/pause, and skip
-  // buttons stay visible so the participant can still interact with playback
-  // -- only manual segment selection is locked during real video trials.
+  // Show/hide the segment DROPDOWN. Only visible in DEBUG mode -- production
+  // participants must not be able to swap the config the trial is running.
+  // Scrub bar, play/pause, and skip buttons stay visible for participant use.
   function updateSelectVisibility() {
-    const ec = window.SUBT && window.SUBT.experimentController;
-    const hideSelect = !!(window.SUBT && window.SUBT.isVideo
-      && ec && ec.trialInProgress && ec.trialInProgress()
-      && !ec.trialIsPractice());
-    select.style.display = hideSelect ? "none" : "";
+    const dbg = window.SUBT && typeof window.SUBT.isDebugMode === "function"
+      && window.SUBT.isDebugMode();
+    select.style.display = dbg ? "" : "none";
   }
 
   function updateVisibility() {

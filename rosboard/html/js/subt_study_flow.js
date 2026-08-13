@@ -330,6 +330,10 @@
     var qp = new URLSearchParams(location.search);
     return !!(expCfg.debugFast || qp.get("debug") === "1");
   }
+  // Expose so other files (subt_replay.js, subt_draw_replay.js) can gate
+  // debug-only UI without recomputing the URL/config check.
+  window.SUBT = window.SUBT || {};
+  window.SUBT.isDebugMode = debugMode;
   console.log("[study-flow] debugMode:", debugMode(), "url:", location.search);
 
   function trialWhackamoleOptions(trialNumber) {
@@ -564,7 +568,10 @@
             if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
               var current = window.SUBT.experimentController.currentTrial();
               var opts = trialWhackamoleOptions(current + 1);
-              opts.waitFor = setupPromise;
+              // Debug: skip the setup gate so whackamole ends on its own
+              // timer instead of waiting up to ~15s for sensor readiness.
+              // Production still gates on setup to guarantee zero visible gap.
+              if (!debugMode()) opts.waitFor = setupPromise;
               window.SUBT.showMinigame(function () {
                 // Minigame gone, sim visible. Wait for the participant to
                 // finish the trial (end-button + stop + questions).

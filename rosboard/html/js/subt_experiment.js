@@ -195,11 +195,18 @@
     // trial start) is worth it -- the alternative is guessing.
     // Safety cap: if any topic doesn't publish within safetyMs, we give up
     // and call done anyway so trials can never permanently hang.
+    // Fires done() the moment ANY whitelisted sensor topic publishes a
+    // message. One topic is enough proof-of-life -- waiting for ALL topics
+    // means the slowest one (or one that's temporarily offline, like a
+    // video-mode bag between segments) blocks the whole trial start.
+    // Safety cap tightened to 3s so worst case is short; a longer wait
+    // means the pipeline is genuinely broken and blocking further is
+    // pointless.
     function waitForFreshSensorFrames(done) {
       var wl = whitelist;
-      var safetyMs = cfg.sensorReadySafetyMs || 15000;
+      var safetyMs = cfg.sensorReadySafetyMs || 3000;
       if (!wl.length || !connected) { setTimeout(done, 200); return; }
-      var pending = wl.length, called = false;
+      var called = false;
       function fin() { if (called) return; called = true; done(); }
       var subs = [];
       var timer = setTimeout(function () {
@@ -213,8 +220,10 @@
         });
         subs.push(sub);
         sub.subscribe(function () {
-          try { sub.unsubscribe(); } catch (e) { }
-          if (--pending === 0) { clearTimeout(timer); fin(); }
+          // First-topic-wins: dismiss the moment ANY topic delivers.
+          subs.forEach(function (s) { try { s.unsubscribe(); } catch (e) { } });
+          clearTimeout(timer);
+          fin();
         });
       });
     }
@@ -258,7 +267,7 @@
           // the video content stay locked together because both come from the
           // same trial-info fetch. Manual segment selection in the picker
           // remains available for practice-mode debugging.
-          if (window.SUBT && window.SUBT.isVideo && j.config_name) {
+          if (window.SUBT && window.SUBT.isReplay && j.config_name) {
             fetch("/segments/play", {
               method: "POST",
               headers: { "Content-Type": "application/json" },

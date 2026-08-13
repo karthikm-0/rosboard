@@ -383,6 +383,14 @@
       && document.querySelector(".subt-flow-button"));
   }
 
+  // Segment dropdown is DEBUG-only. Participants must never be able to
+  // change the config the trial is running.
+  function updateSelectVisibility() {
+    var dbg = window.SUBT && typeof window.SUBT.isDebugMode === "function"
+      && window.SUBT.isDebugMode();
+    select.style.display = dbg ? "" : "none";
+  }
+
   function updateVisibility() {
     var nowVisible = shouldShow();
     if (!nowVisible) {
@@ -392,6 +400,7 @@
     }
     panel.style.display = nowVisible ? "block" : "none";
     if (overlay) overlay.style.display = panel.style.display;
+    updateSelectVisibility();
     if (panel.style.display === "block") {
       visible = true;
       ensureOverlay(true);
