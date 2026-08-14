@@ -142,14 +142,39 @@
     });
   }
 
-  function collectFields(root) {
+  // Broker + participant from URL params (broker sets them when redirecting
+  // to the sim). Both required for /collect; without them we log-only.
+  function collectContext() {
+    var qp = new URLSearchParams(location.search);
+    return {
+      brokerUrl: (qp.get("broker") || "").replace(/\/$/, ""),
+      pid: qp.get("pid") || "",
+    };
+  }
+
+  function collectFields(root, kind) {
     var data = {};
     $all("input, textarea, select", root).forEach(function (el) {
       if (!el.name) return;
       if ((el.type === "radio" || el.type === "checkbox") && !el.checked) return;
       data[el.name] = el.type === "checkbox" ? !!el.checked : el.value;
     });
-    console.log("study-flow data", data);
+    console.log("study-flow data", kind || "(no-kind)", data);
+    // Persist to broker/data/<PID>/responses.jsonl. Best-effort: a POST failure
+    // (broker down, network hiccup) never blocks flow progression -- the
+    // console.log above is the local fallback log.
+    var ctx = collectContext();
+    if (ctx.brokerUrl && ctx.pid) {
+      var payload = { kind: kind || "unknown" };
+      var ec = window.SUBT && window.SUBT.experimentController;
+      if (ec && typeof ec.currentTrial === "function") payload.trial = ec.currentTrial();
+      Object.keys(data).forEach(function (k) { payload[k] = data[k]; });
+      fetch(ctx.brokerUrl + "/collect?pid=" + encodeURIComponent(ctx.pid), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(function (e) { console.warn("collect POST failed", e); });
+    }
     return data;
   }
 
@@ -232,7 +257,7 @@
               if (aborted) return;
               var agree = $("[data-flow-consent]", root);
               if (agree && !agree.checked) return;
-              collectFields(root);
+              collectFields(root, opts.collect || "consent");
               resolve();
             });
           }
@@ -244,7 +269,7 @@
         actions.appendChild(next);
         next.addEventListener("click", function () {
           if (aborted) return;
-          if (opts.collect) collectFields(root);
+          if (opts.collect) collectFields(root, opts.collect);
           resolve();
         });
       });
@@ -390,7 +415,7 @@
       actions.appendChild(next);
       panel().appendChild(actions);
       next.addEventListener("click", function () {
-        collectFields(panel());
+        collectFields(panel(), "report_ready");
         resolve();
       });
     });

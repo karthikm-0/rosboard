@@ -262,6 +262,9 @@
           if (!j) return;
           window.SUBT.compassGoal = j.goal || null;
           window.SUBT.compassTakeover = j.takeover || null;
+          // Track the current trial's config name so trial-start/-end POSTs
+          // can include it. Also used by video/draw modes to auto-play.
+          window.SUBT._lastTrialConfig = j.config_name || null;
           // In video mode, real trials auto-play the segment named after the
           // trial's config (e.g. "config_5"). The compass geometry above and
           // the video content stay locked together because both come from the
@@ -297,6 +300,34 @@
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) { if (done) done(j || {}); })
         .catch(function () { if (done) done({}); });
+    }
+
+    // Best-effort trial lifecycle logging. Broker enforces the collection
+    // gate; on our side we always fire the POST if we have pid/broker (no
+    // ordering constraint with the trial itself -- fire and forget).
+    function currentMode() {
+      if (window.SUBT && window.SUBT.isDraw) return "draw";
+      if (window.SUBT && window.SUBT.isVideo) return "video";
+      return "sim";
+    }
+    function currentConfigName() {
+      // Populated by refreshCompassForTrial's /trial-info response
+      return (window.SUBT && window.SUBT._lastTrialConfig) || null;
+    }
+    function postTrialLifecycle(kind, trialNum, extra) {
+      if (!brokerUrl || !pid || !trialNum) return;
+      var body = {
+        condition: (extra && extra.condition) || null,
+        mode: currentMode(),
+        config: currentConfigName(),
+      };
+      Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+      fetch(brokerUrl.replace(/\/$/, "") + "/" + kind
+            + "?pid=" + encodeURIComponent(pid) + "&trial=" + trialNum, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).catch(function () {});
     }
 
     window.SUBT.experimentController = {
@@ -343,6 +374,12 @@
         var beforeAdvanceSimSec = simTimeSec;
         pulse();
         if (trialStartSimSec == null && simTimeSec != null) trialStartSimSec = simTimeSec;
+        // Log trial start (broker gates on COLLECT_RESPONSES). Skip for
+        // practice trials -- those aren't part of the recorded dataset.
+        if (!isPractice) {
+          postTrialLifecycle("trial-start", currentTrial,
+            { condition: opts.condition || null });
+        }
         if (isPractice) trialLbl.textContent = opts.label || "Practice";
         else setTrialLabel(currentTrial);
         // opts.noOverlay=true: caller is showing its own coverage (e.g. the
@@ -368,6 +405,11 @@
         trialIsPractice = false;
         if (simTimeSec != null && trialStartSimSec != null) {
           trialElapsedSimSec = Math.max(0, simTimeSec - trialStartSimSec);
+        }
+        if (!wasPractice) {
+          postTrialLifecycle("trial-end", currentTrial, {
+            elapsed_sim_sec: trialElapsedSimSec,
+          });
         }
         if (wasPractice) expectNextSim();
         if (done) done();
