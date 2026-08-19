@@ -15,7 +15,12 @@ window.SUBT = {
     // rosboard's single-threaded Python img.py compressor -- the browser
     // just relays JPEG bytes to the canvas. ImageViewer.js already handles
     // sensor_msgs/msg/CompressedImage natively.
-    { topicName: "/X1/front/image_raw/compressed", topicType: "sensor_msgs/msg/CompressedImage" },
+    // Camera is now served via web_video_server MJPEG (see subt_layout.js
+    // ensureCameraCard). Rosboard subscribing to the compressed topic was
+    // duplicating the stream and burning CPU on base64+JSON serialization.
+    // Removed from the whitelist so rosboard never subscribes; subt_layout.js
+    // creates a synthetic .card[data-topic="..."] with an MJPEG <img>.
+    // { topicName: "/X1/front/image_raw/compressed", topicType: "sensor_msgs/msg/CompressedImage" },
     // Use the decimated preview cloud (row_stride=2, col_stride=4 = 8x fewer
     // points) instead of the raw /registered_scan. aede_registered_scan_bridge
     // publishes it when publish_lidar_preview:=true in x1_world.launch.py.
