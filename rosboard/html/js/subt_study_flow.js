@@ -46,10 +46,6 @@
     return cfg.reportWhenReadySliderEnabled === true;
   }
 
-  function variantFor(slot) {
-    return slot === 1 ? "first-seen" : "second-seen";
-  }
-
   function contentForCondition(prefix, condition) {
     return "content/" + prefix + "_" + condition.toLowerCase() + (prefix === "task" ? "_intro" : "_instructions") + ".html";
   }
@@ -582,7 +578,6 @@
       return p.then(function () {
         if (plan.type === "condition_intro") {
           return showContent(contentForCondition("task", condition), {
-            variant: variantFor(step.conditionSlot),
             buttonLabel: plan.buttonLabel || "Next",
           });
         }
@@ -686,11 +681,11 @@
     if (step.type === "condition_training") return runConditionTraining(flow, step, order);
     if (step.type === "condition_intro") {
       var c1 = getCondition(order, step.conditionSlot);
-      return showContent(contentForCondition("task", c1), { variant: variantFor(step.conditionSlot) });
+      return showContent(contentForCondition("task", c1));
     }
     if (step.type === "set_instructions") {
       var c2 = getCondition(order, step.conditionSlot);
-      return showContent(contentForCondition("set", c2), { variant: variantFor(step.conditionSlot), buttonLabel: "Begin Trials" });
+      return showContent(contentForCondition("set", c2), { buttonLabel: "Begin Trials" });
     }
     if (step.type === "trial_set") {
       var c3 = getCondition(order, step.conditionSlot);
