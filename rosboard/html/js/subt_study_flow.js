@@ -381,6 +381,34 @@
     return t.toFixed(1) + " s";
   }
 
+  // Trial counter, rendered into the blue app bar. Numbering is per SET, not
+  // across the whole study: the participant is introduced to one set at a
+  // time, so "Trial 3 of 5" is the position they can actually place
+  // themselves in -- a running 1..10 across both sets wouldn't match the set
+  // they were just given instructions for.
+  var progressEl = null;
+
+  function progressBanner() {
+    if (progressEl) return progressEl;
+    progressEl = document.createElement("span");
+    progressEl.className = "subt-flow-progress";
+    // Lives in the MDL header row so it sits inside the blue bar and moves
+    // with it. Falls back to the body if the layout chrome isn't there.
+    var row = $(".mdl-layout__header-row");
+    (row || document.body).appendChild(progressEl);
+    return progressEl;
+  }
+
+  function showTrialProgress(n, count) {
+    var el = progressBanner();
+    el.textContent = count > 0 ? "Trial " + n + " of " + count : "Trial " + n;
+    el.style.display = "";
+  }
+
+  function hideTrialProgress() {
+    if (progressEl) progressEl.style.display = "none";
+  }
+
   function wireReportTimeWidget(root) {
     var input = $("#reported-ready-time", root);
     var output = $("#reported-ready-time-output", root);
@@ -579,6 +607,7 @@
         p = p.then(function () {
           return new Promise(function (resolve) {
             hideShell();
+            showTrialProgress(n, count);
             // Start the trial's setup NOW (in the background). runRobotTrial
             // returns a promise for the FULL trial (setup + participant end +
             // questions). It invokes onSetupDone as soon as its own setup
@@ -609,7 +638,7 @@
         });
       })(i + 1);
     }
-    return p;
+    return p.then(hideTrialProgress);
   }
 
   function trialCountForSet(flow, setIndex, total) {

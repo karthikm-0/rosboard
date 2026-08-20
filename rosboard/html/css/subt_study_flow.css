@@ -237,3 +237,22 @@
   color: #66bb6a;
   font: 700 28px Arial, Helvetica, sans-serif;
 }
+
+/* Trial counter inside the blue MDL app bar. Absolutely centred across the
+   header row (which is a flex container whose spacer would otherwise push the
+   counter to one end), and click-through so it never blocks the bar. */
+.mdl-layout__header-row {
+  position: relative;
+}
+
+.subt-flow-progress {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font: 500 17px "Roboto", Arial, Helvetica, sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
