@@ -1,0 +1,87 @@
+{
+  "name": "operator_readiness_3_cond_pilot",
+  "defaultConditionOrder": ["D", "R", "W"],
+  "trialSets": [
+    { "conditionSlot": 1, "defaultCount": 10 },
+    { "conditionSlot": 2, "defaultCount": 10 },
+    { "conditionSlot": 3, "defaultCount": 10 }
+  ],
+  "conditionTraining": {
+    "D": [
+      {
+        "title": "Driving Practice",
+        "stopLabel": "End Driving Practice",
+        "goal": { "x": 0.0, "y": 0.0 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      },
+      {
+        "type": "condition_intro",
+        "buttonLabel": "Start Scenario Practice"
+      },
+      {
+        "title": "Scenario Practice",
+        "stopLabel": "End Scenario Practice",
+        "goal": { "x": 3.54, "y": 3.54 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      }
+    ],
+    "R": [
+      {
+        "type": "condition_intro",
+        "buttonLabel": "Next"
+      },
+      {
+        "type": "content",
+        "content": "content/robot_reviewing_practice_instructions.html",
+        "buttonLabel": "Start Scenario Practice"
+      },
+      {
+        "title": "Scenario Practice",
+        "stopLabel": "End Scenario Practice",
+        "goal": { "x": 3.54, "y": 3.54 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      }
+    ],
+    "W": [
+      {
+        "type": "condition_intro",
+        "buttonLabel": "Next"
+      },
+      {
+        "type": "content",
+        "content": "content/robot_drawing_practice_instructions.html",
+        "buttonLabel": "Start Scenario Practice"
+      },
+      {
+        "title": "Scenario Practice",
+        "stopLabel": "End Scenario Practice",
+        "goal": { "x": 3.54, "y": 3.54 },
+        "takeover": { "x": 0.0, "y": 0.0 }
+      }
+    ]
+  },
+  "steps": [
+    { "type": "content", "content": "content/consent.html", "requiresConsent": true },
+    { "type": "content", "content": "content/whackamole_instructions.html", "buttonLabel": "Start Practice" },
+    { "type": "whackamole_practice" },
+    { "type": "content", "content": "content/robot_task_description.html" },
+    { "type": "content", "content": "content/robot_console_instructions.html" },
+    { "type": "content", "content": "content/robot_driving_practice_instructions.html" },
+    { "type": "condition_training", "conditionSlot": 1 },
+    { "type": "set_instructions", "conditionSlot": 1 },
+    { "type": "trial_set", "conditionSlot": 1 },
+    { "type": "content", "content": "content/set_end_questions.html", "collect": "set_end" },
+    { "type": "content", "content": "content/break.html" },
+    { "type": "condition_training", "conditionSlot": 2 },
+    { "type": "set_instructions", "conditionSlot": 2 },
+    { "type": "trial_set", "conditionSlot": 2 },
+    { "type": "content", "content": "content/set_end_questions.html", "collect": "set_end" },
+    { "type": "content", "content": "content/break.html" },
+    { "type": "condition_training", "conditionSlot": 3 },
+    { "type": "set_instructions", "conditionSlot": 3 },
+    { "type": "trial_set", "conditionSlot": 3 },
+    { "type": "content", "content": "content/set_end_questions.html", "collect": "set_end" },
+    { "type": "content", "content": "content/experiment_end_questions.html", "collect": "experiment_end" },
+    { "type": "content", "content": "content/completion.html", "finish": true }
+  ]
+}
