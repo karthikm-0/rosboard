@@ -9,6 +9,7 @@
   var aborted = false;
   var textCache = {};
   var mostRecentTrialSetCount = 10;
+  var cumulativeWhackamoleScore = 0;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -151,13 +152,7 @@
     };
   }
 
-  function collectFields(root, kind) {
-    var data = {};
-    $all("input, textarea, select", root).forEach(function (el) {
-      if (!el.name) return;
-      if ((el.type === "radio" || el.type === "checkbox") && !el.checked) return;
-      data[el.name] = el.type === "checkbox" ? !!el.checked : el.value;
-    });
+  function collectData(kind, data, trialNumber) {
     console.log("study-flow data", kind || "(no-kind)", data);
     // Persist to broker/data/<PID>/responses.jsonl. Best-effort: a POST failure
     // (broker down, network hiccup) never blocks flow progression -- the
@@ -166,7 +161,8 @@
     if (ctx.brokerUrl && ctx.pid) {
       var payload = { kind: kind || "unknown" };
       var ec = window.SUBT && window.SUBT.experimentController;
-      if (ec && typeof ec.currentTrial === "function") payload.trial = ec.currentTrial();
+      if (trialNumber != null) payload.trial = trialNumber;
+      else if (ec && typeof ec.currentTrial === "function") payload.trial = ec.currentTrial();
       Object.keys(data).forEach(function (k) { payload[k] = data[k]; });
       fetch(ctx.brokerUrl + "/collect?pid=" + encodeURIComponent(ctx.pid), {
         method: "POST",
@@ -175,6 +171,16 @@
       }).catch(function (e) { console.warn("collect POST failed", e); });
     }
     return data;
+  }
+
+  function collectFields(root, kind) {
+    var data = {};
+    $all("input, textarea, select", root).forEach(function (el) {
+      if (!el.name) return;
+      if ((el.type === "radio" || el.type === "checkbox") && !el.checked) return;
+      data[el.name] = el.type === "checkbox" ? !!el.checked : el.value;
+    });
+    return collectData(kind, data);
   }
 
   function wireConditionalFields(root) {
@@ -679,12 +685,23 @@
 
             if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
               var current = window.SUBT.experimentController.currentTrial();
-              var opts = trialWhackamoleOptions(current + 1);
+              var trialNumber = current + 1;
+              var opts = trialWhackamoleOptions(trialNumber);
+              opts.scoreOffset = cumulativeWhackamoleScore;
               // Debug: skip the setup gate so whackamole ends on its own
               // timer instead of waiting up to ~15s for sensor readiness.
               // Production still gates on setup to guarantee zero visible gap.
               if (!debugMode()) opts.waitFor = setupPromise;
-              window.SUBT.showMinigame(function () {
+              window.SUBT.showMinigame(function (result) {
+                result = result || { score: 0, hits: 0, misses: 0 };
+                cumulativeWhackamoleScore += Number(result.score) || 0;
+                collectData("whackamole_trial", {
+                  condition: condition,
+                  score: Number(result.score) || 0,
+                  hits: Number(result.hits) || 0,
+                  misses: Number(result.misses) || 0,
+                  cumulative_score: cumulativeWhackamoleScore,
+                }, trialNumber);
                 // Minigame gone, sim visible. Wait for the participant to
                 // finish the trial (end-button + stop + questions).
                 trialFullPromise.then(resolve);

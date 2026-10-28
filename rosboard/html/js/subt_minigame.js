@@ -128,13 +128,14 @@
 
     // --- state ---
     var score = 0, hits = 0, misses = 0;
+    var scoreOffset = Math.max(0, Number(opts.scoreOffset) || 0);
     var startMs = Date.now();
     var gameMs = Math.max(0, Number(opts.durationMs || GAME_MS));
     var running = true;
     var spawnTimer = null;
 
     function updateHud() {
-      scoreEl.textContent = "Score: " + score;
+      scoreEl.textContent = "Score: " + (scoreOffset + score);
     }
 
     // --- one mole cycle ---
@@ -240,7 +241,12 @@
       holes.forEach(function (h) { clearMole(h, 0); });
       try { wrap.remove(); } catch (e) { }
       isOpen = false;
-      if (typeof onDone === "function") onDone({ score: score, hits: hits, misses: misses });
+      if (typeof onDone === "function") onDone({
+        score: score,
+        hits: hits,
+        misses: misses,
+        cumulativeScore: scoreOffset + score,
+      });
     }
 
     function endGame() {
