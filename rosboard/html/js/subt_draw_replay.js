@@ -37,6 +37,10 @@
 
   var panel = el("div", {
     position: "fixed",
+    // Stay hidden until updateVisibility confirms that a W trial is active.
+    // Without this, the panel can flash during page startup before the first
+    // 250 ms visibility check.
+    display: "none",
     // Placed by reposition() to span the sensor card group, matching the
     // segment replay controls.
     left: "50%",

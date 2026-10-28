@@ -82,6 +82,8 @@
 
   const panel = el("div", {
     position: "fixed",
+    // Stay hidden until updateVisibility confirms that an R trial is active.
+    display: "none",
     // Placed by reposition() to span the full card-grid width (camera left
     // edge to lidar right edge). left/width/bottom overwritten there.
     left: "50%",
