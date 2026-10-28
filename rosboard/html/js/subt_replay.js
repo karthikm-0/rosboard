@@ -252,7 +252,12 @@
 
   // One button for play/pause, as in any video player: it starts the selected
   // segment when nothing is loaded and toggles from then on.
-  const buttonRow = el("div", { display: "flex", gap: "6px", alignItems: "stretch" });
+  const buttonRow = el("div", {
+    display: "grid",
+    gridTemplateColumns: "1fr 2fr 1fr",
+    gap: "6px",
+    alignItems: "stretch",
+  });
 
   function skip(delta) {
     if (!duration) return;
@@ -265,14 +270,54 @@
   const backButton = iconButton("back", "Back " + SKIP_SEC + "s", () => skip(-SKIP_SEC));
   const playButton = iconButton("play", "Play / Pause", onPlayPause);
   const forwardButton = iconButton("forward", "Forward " + SKIP_SEC + "s", () => skip(SKIP_SEC));
-  playButton.style.flex = "2";
   playButton.style.background = ACCENT;
   playButton.style.borderColor = ACCENT;
+
+  const submitButton = el("button", {
+    gridColumn: "2",
+    gridRow: "2",
+    padding: "8px 12px",
+    cursor: "not-allowed",
+    background: "#2e7d32",
+    border: "1px solid #2e7d32",
+    borderRadius: "4px",
+    color: "#fff",
+    fontWeight: "bold",
+    opacity: "0.45",
+  }, "Submit");
+  submitButton.type = "button";
+  submitButton.disabled = true;
 
   buttonRow.appendChild(backButton);
   buttonRow.appendChild(playButton);
   buttonRow.appendChild(forwardButton);
+  buttonRow.appendChild(submitButton);
   panel.appendChild(buttonRow);
+
+  function flowSubmitButton() {
+    return document.querySelector(".subt-flow-button");
+  }
+
+  function updateSubmitButton() {
+    const flowButton = flowSubmitButton();
+    if (flowButton && window.SUBT && window.SUBT.isVideo) {
+      flowButton.style.display = "none";
+    }
+    const eligible = !!(playing && currentlyPaused && flowButton);
+    submitButton.disabled = !eligible;
+    submitButton.style.opacity = eligible ? "1" : "0.45";
+    submitButton.style.cursor = eligible ? "pointer" : "not-allowed";
+  }
+
+  submitButton.addEventListener("click", function () {
+    if (submitButton.disabled || !currentlyPaused) return;
+    const flowButton = flowSubmitButton();
+    if (!flowButton) return;
+    submitButton.disabled = true;
+    submitButton.style.opacity = "0.45";
+    submitButton.style.cursor = "not-allowed";
+    flowButton.click();
+  });
 
   const status = el("div", {
     marginTop: "8px",
@@ -355,6 +400,10 @@
   function onPlayPause() {
     // Already on this segment -> plain toggle. Otherwise start the picked one.
     if (playing && select.value === loadedSegment) {
+      // A pause is eligible only after /status confirms it. In particular,
+      // disable Submit immediately when resuming from a confirmed pause.
+      if (currentlyPaused) currentlyPaused = false;
+      updateSubmitButton();
       post("/segments/toggle", {}).catch(function () {});
       return;
     }
@@ -384,6 +433,7 @@
         // beat. Ignore its numbers until it confirms the pending segment is
         // loaded -- prevents the playhead from limping on the stale timeline.
         if (pendingSegment && data.segment !== pendingSegment) {
+          updateSubmitButton();
           return;
         }
         pendingSegment = null;
@@ -403,6 +453,7 @@
             + (data.paused ? "  [paused]" : "")
             + (data.rate && data.rate !== 1 ? "  " + data.rate.toFixed(2) + "x" : "");
         } else {
+          currentlyPaused = true;
           duration = 0;
           currentPosition = 0;
           setIcon(playButton, "play");
@@ -413,6 +464,7 @@
             status.textContent = segments.length + " segment(s) available";
           }
         }
+        updateSubmitButton();
       })
       .catch(() => {});
   }
@@ -518,6 +570,7 @@
     // listen for, so it is polled. Cheap: a boolean read and a style write.
     setInterval(function () {
       updateSelectVisibility();
+      updateSubmitButton();
       if (updateVisibility()) reposition();
     }, 250);
     // Only poll once the picker is confirmed to belong on this page; a

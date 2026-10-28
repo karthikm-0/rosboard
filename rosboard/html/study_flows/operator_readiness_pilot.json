@@ -31,7 +31,7 @@
       },
       {
         "title": "Scenario Practice",
-        "stopLabel": "End Scenario Practice",
+        "stopLabel": "Submit",
         "goal": { "x": 3.54, "y": 3.54 },
         "takeover": { "x": 0.0, "y": 0.0 }
       }

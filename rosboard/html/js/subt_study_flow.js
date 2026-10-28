@@ -509,12 +509,13 @@
     });
   }
 
-  function waitForTrialButton(label) {
+  function waitForTrialButton(label, hidden) {
     return new Promise(function (resolve) {
       var btn = document.createElement("button");
       btn.className = "subt-flow-button";
       btn.type = "button";
       btn.textContent = label;
+      if (hidden) btn.style.display = "none";
       btn.style.position = "fixed";
       btn.style.right = "24px";
       btn.style.bottom = "24px";
@@ -544,22 +545,11 @@
       activateViewer().then(function () {
         window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent }, function () {
           if (silent) { try { onSetupDone(); } catch (e) {} }
-          var clock = null;
           var lastElapsed = 0;
-          if (condition === "R") {
-            clock = document.createElement("div");
-            clock.className = "subt-flow-clock";
-            document.body.appendChild(clock);
-            var tick = function () {
-              if (!clock) return;
-              lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
-              clock.textContent = "Elapsed: " + formatSeconds(lastElapsed);
-              requestAnimationFrame(tick);
-            };
-            tick();
-          }
-          waitForTrialButton(condition === "R" ? "Stop Scenario" : "End Robot Trial").then(function () {
-            if (clock) { clock.remove(); clock = null; }
+          waitForTrialButton(
+                condition === "R" ? "Submit" : "End Robot Trial",
+                condition === "W"
+              ).then(function () {
             hideShell();
             window.SUBT.experimentController.stopTrial(function () {
               setViewerActive(false);
@@ -596,7 +586,7 @@
           : Promise.resolve();
 
         started.then(function () {
-          waitForTrialButton(step.stopLabel || "End Practice").then(function () {
+          waitForTrialButton(step.stopLabel || "End Practice", step.condition === "W").then(function () {
             fetch("/segments/stop", { method: "POST" })
               .catch(function () {})
               .then(function () {

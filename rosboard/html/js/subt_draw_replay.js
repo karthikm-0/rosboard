@@ -90,16 +90,13 @@
   }
   var stopButton = button("Stop and draw", "#b23b3b");
   var clearButton = button("Clear");
-  var saveButton = button("Save", "#2e7d32");
-  var continueButton = button("Continue", "#3f51b5");
+  var saveButton = button("Submit", "#2e7d32");
   row.appendChild(stopButton);
   row.appendChild(clearButton);
   row.appendChild(saveButton);
-  row.appendChild(continueButton);
   panel.appendChild(row);
   clearButton.style.display = "none";
   saveButton.style.display = "none";
-  continueButton.style.display = "none";
 
   var status = el("div", {
     marginTop: "8px",
@@ -258,8 +255,7 @@
     stopButton.style.display = "none";
     clearButton.style.display = "block";
     saveButton.style.display = "block";
-    continueButton.style.display = "none";
-    status.textContent = "draw a path on the lidar, then Save";
+    status.textContent = "draw a path on the lidar, then Submit";
   }
 
   function exitDrawing() {
@@ -271,21 +267,6 @@
     stopButton.style.display = "block";
     clearButton.style.display = "none";
     saveButton.style.display = "none";
-    continueButton.style.display = "none";
-  }
-
-  function showSavedState(count) {
-    drawing = false;
-    pointerDown = false;
-    if (overlay) {
-      overlay.style.pointerEvents = "none";
-      overlay.style.borderColor = "rgba(0,255,102,0.25)";
-    }
-    stopButton.style.display = "none";
-    clearButton.style.display = "none";
-    saveButton.style.display = "none";
-    continueButton.style.display = "block";
-    status.textContent = "saved " + count + " points; continue when ready";
   }
 
   function continueTrial() {
@@ -293,7 +274,7 @@
     if (flowButton) {
       flowButton.click();
     } else {
-      status.textContent = "saved; use the study Continue button to advance";
+      status.textContent = "use the study button to advance";
     }
   }
 
@@ -363,7 +344,7 @@
 
   saveButton.addEventListener("click", function () {
     if (!points.length) {
-      status.textContent = "draw a path before saving";
+      status.textContent = "draw a path before submitting";
       return;
     }
     var target = lidarCanvas();
@@ -376,7 +357,7 @@
       points: points,
     }).then(function (data) {
       if (data.ok) {
-        showSavedState(data.count);
+        continueTrial();
       } else {
         status.textContent = "save failed: " + (data.error || data.message);
       }
@@ -384,8 +365,6 @@
       status.textContent = "save failed: " + error;
     });
   });
-
-  continueButton.addEventListener("click", continueTrial);
 
   function shouldShow() {
     if (!(window.SUBT && window.SUBT.isDraw)) return false;
@@ -404,6 +383,12 @@
   }
 
   function updateVisibility() {
+    var flowButton = document.querySelector(".subt-flow-button");
+    if (flowButton && window.SUBT && window.SUBT.isDraw) {
+      // The study flow owns advancement, but W participants advance only by
+      // saving their drawing with the interaction bar's Submit button.
+      flowButton.style.display = "none";
+    }
     var nowVisible = shouldShow();
     if (!nowVisible) {
       startedForThisView = false;

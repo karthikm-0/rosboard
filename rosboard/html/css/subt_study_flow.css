@@ -231,18 +231,6 @@
   text-align: center;
 }
 
-.subt-flow-clock {
-  position: fixed;
-  top: 18px;
-  left: 18px;
-  z-index: 99999;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  font: 700 18px Arial, Helvetica, sans-serif;
-}
-
 .subt-flow-report-time {
   padding: 18px;
   border: 1px solid #343b49;
