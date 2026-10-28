@@ -206,6 +206,48 @@
     });
   }
 
+  function wireRangeTouchValidation(root) {
+    $all('input[type="range"]', root).forEach(function (slider) {
+      slider.dataset.touched = "false";
+      var markTouched = function () {
+        slider.dataset.touched = "true";
+        slider.removeAttribute("aria-invalid");
+        var question = slider.closest(".subt-flow-question");
+        if (question) question.classList.remove("subt-flow-question-missing");
+        if (!$all('input[type="range"][data-touched="false"]', root).length) {
+          var message = $(".subt-flow-validation", root);
+          if (message) message.remove();
+        }
+      };
+      ["pointerdown", "mousedown", "touchstart", "keydown", "input", "change"].forEach(function (eventName) {
+        slider.addEventListener(eventName, markTouched, { passive: true });
+      });
+    });
+  }
+
+  function validateTouchedRanges(root) {
+    var missing = $all('input[type="range"][data-touched="false"]', root);
+    if (!missing.length) return true;
+
+    missing.forEach(function (slider) {
+      slider.setAttribute("aria-invalid", "true");
+      var question = slider.closest(".subt-flow-question");
+      if (question) question.classList.add("subt-flow-question-missing");
+    });
+    var message = $(".subt-flow-validation", root);
+    if (!message) {
+      message = document.createElement("p");
+      message.className = "subt-flow-validation";
+      message.setAttribute("role", "alert");
+      message.textContent = "Please revisit the highlighted questions and touch each slider before continuing.";
+      var actions = $(".subt-flow-actions", root);
+      root.insertBefore(message, actions || null);
+    }
+    missing[0].focus();
+    missing[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
+  }
+
   function wireConsent(root) {
     var agree = $("[data-flow-consent]", root);
     var proceed = $('[data-flow-action="proceed"]', root);
@@ -234,6 +276,7 @@
     applyVariant(panel(), opts.variant);
     wireConditionalFields(panel());
     wireConsent(panel());
+    wireRangeTouchValidation(panel());
     return panel();
   }
 
@@ -253,6 +296,7 @@
           if (proceed) {
             proceed.addEventListener("click", function () {
               if (aborted) return;
+              if (!validateTouchedRanges(root)) return;
               var agree = $("[data-flow-consent]", root);
               if (agree && !agree.checked) return;
               collectFields(root, opts.collect || "consent");
@@ -267,6 +311,7 @@
         actions.appendChild(next);
         next.addEventListener("click", function () {
           if (aborted) return;
+          if (!validateTouchedRanges(root)) return;
           if (opts.collect) collectFields(root, opts.collect);
           resolve();
         });

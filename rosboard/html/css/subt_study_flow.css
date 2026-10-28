@@ -186,6 +186,25 @@
   margin-right: 8px;
 }
 
+.subt-flow-question-missing {
+  margin-left: -12px;
+  margin-right: -12px;
+  padding: 12px;
+  border: 1px solid #ff6b6b;
+  border-radius: 7px;
+  background: rgba(255, 82, 82, 0.08);
+}
+
+.subt-flow-validation {
+  margin: 22px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #ff6b6b;
+  border-radius: 7px;
+  background: rgba(255, 82, 82, 0.12);
+  color: #ffb3b3;
+  font-weight: 700;
+}
+
 .subt-flow-scale-labels {
   display: flex;
   justify-content: space-between;
