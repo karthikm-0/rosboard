@@ -8,6 +8,7 @@
   if (!cfg.enabled) return;
   var aborted = false;
   var textCache = {};
+  var mostRecentTrialSetCount = 10;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -273,6 +274,19 @@
     setViewerActive(false);
     showShell();
     panel().innerHTML = html;
+    if (opts.taskNumber) {
+      $all("[data-task-number]", panel()).forEach(function (el) {
+        el.textContent = String(opts.taskNumber);
+      });
+    }
+    if (opts.setTrialCount) {
+      $all("[data-set-trial-count]", panel()).forEach(function (el) {
+        el.textContent = String(opts.setTrialCount);
+      });
+      $all("[data-set-trial-count-max]", panel()).forEach(function (el) {
+        el.max = String(opts.setTrialCount);
+      });
+    }
     applyVariant(panel(), opts.variant);
     wireConditionalFields(panel());
     wireConsent(panel());
@@ -637,6 +651,7 @@
         if (plan.type === "condition_intro") {
           return showContent(contentForCondition("task", condition), {
             buttonLabel: plan.buttonLabel || "Next",
+            taskNumber: step.conditionSlot,
           });
         }
         if (plan.type === "content") {
@@ -732,6 +747,7 @@
         buttonLabel: step.buttonLabel || (step.finish ? "Finish" : "Next"),
         collect: step.collect,
         requiresConsent: step.requiresConsent,
+        setTrialCount: step.content === "content/set_end_questions.html" ? mostRecentTrialSetCount : null,
       }).then(function () {
         if (step.finish) window.SUBT.experimentController.finishAndRelease();
       });
@@ -741,7 +757,7 @@
     if (step.type === "condition_training") return runConditionTraining(flow, step, order);
     if (step.type === "condition_intro") {
       var c1 = getCondition(order, step.conditionSlot);
-      return showContent(contentForCondition("task", c1));
+      return showContent(contentForCondition("task", c1), { taskNumber: step.conditionSlot });
     }
     if (step.type === "set_instructions") {
       var c2 = getCondition(order, step.conditionSlot);
@@ -749,7 +765,8 @@
     }
     if (step.type === "trial_set") {
       var c3 = getCondition(order, step.conditionSlot);
-      return runTrialSet(c3, trialCountForSet(flow, step.conditionSlot, total));
+      mostRecentTrialSetCount = trialCountForSet(flow, step.conditionSlot, total);
+      return runTrialSet(c3, mostRecentTrialSetCount);
     }
     return Promise.resolve();
   }
