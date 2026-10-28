@@ -133,7 +133,9 @@ let onMsg = function(msg) {
     if(pp && pp.position && pp.orientation) {
       let q = pp.orientation, pos = pp.position;
       let yaw = Math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z));
-      window.SUBT.robotPose = {x: pos.x, y: pos.y, z: pos.z, yaw: yaw};
+      window.SUBT.robotPose = {
+        x: pos.x, y: pos.y, z: pos.z, yaw: yaw, receivedAtMs: Date.now()
+      };
     }
     return;
   }

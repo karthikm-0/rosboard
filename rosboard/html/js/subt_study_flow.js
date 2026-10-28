@@ -539,6 +539,41 @@
     return showContent("content/trial_issue_questions.html", { collect: "trial_issue" });
   }
 
+  function waitForDriveOutcome(startedAtMs) {
+    return new Promise(function (resolve) {
+      var controller = window.SUBT.experimentController;
+      var timer = setInterval(function () {
+        var timeLimitSec = controller.trialTimeLimitSec();
+        var goalToleranceM = controller.goalToleranceM();
+        var pose = window.SUBT.robotPose;
+        var goal = window.SUBT.compassGoal;
+        if (pose && goal && pose.receivedAtMs >= startedAtMs) {
+          var dx = Number(pose.x) - Number(goal.x);
+          var dy = Number(pose.y) - Number(goal.y);
+          if (Math.hypot(dx, dy) <= goalToleranceM) {
+            clearInterval(timer);
+            resolve({ message: "Goal Reached!", outcome: "goal_reached" });
+            return;
+          }
+        }
+        if ((Date.now() - startedAtMs) / 1000 >= timeLimitSec) {
+          clearInterval(timer);
+          resolve({ message: "Time's up!", outcome: "timed_out" });
+        }
+      }, 100);
+    });
+  }
+
+  function showDriveOutcome(result) {
+    var controller = window.SUBT.experimentController;
+    if (typeof window.SUBT.setJoystickManual === "function") {
+      window.SUBT.setJoystickManual(false);
+    }
+    controller.setJoystickVisible(false);
+    controller.showOverlay(result.message, "");
+    return new Promise(function (resolve) { setTimeout(resolve, 1000); });
+  }
+
   // onSetupDone (optional): fires when the sim setup phase completes (readiness
   // + viewer activation + startTrial's done). Used by runTrialSet to keep the
   // whackamole overlay up until the real sim is ready, so the participant
@@ -552,18 +587,28 @@
         window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent }, function () {
           if (silent) { try { onSetupDone(); } catch (e) {} }
           var lastElapsed = 0;
-          waitForTrialButton(
+          var finished = condition === "D"
+            ? waitForDriveOutcome(Date.now())
+            : waitForTrialButton(
                 condition === "R" ? "Submit" : "End Robot Trial",
                 condition === "W"
               ).then(function () {
-            hideShell();
-            window.SUBT.experimentController.stopTrial(function () {
+                return { outcome: "submitted" };
+              });
+          finished.then(function (result) {
+            lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
+            var outcomeDelay = condition === "D" ? showDriveOutcome(result) : Promise.resolve();
+            outcomeDelay.then(function () {
+              hideShell();
+              window.SUBT.experimentController.stopTrial(function () {
               setViewerActive(false);
+              hideExperimentOverlay();
               var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
               var afterStop = condition === "R" && reportWhenReadySliderEnabled()
                 ? showReportWhenReadyQuestion(elapsed)
                 : Promise.resolve();
               afterStop.then(issueQuestions).then(resolve);
+              });
             });
           });
         });

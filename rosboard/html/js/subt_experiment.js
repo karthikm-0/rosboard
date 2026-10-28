@@ -120,7 +120,9 @@
     document.body.appendChild(overlay);
     function showOverlay(title, sub) {
       overlayTitle.textContent = title;
-      overlaySub.textContent = sub || "Please wait - do not close this tab";
+      overlaySub.textContent = sub === undefined
+        ? "Please wait - do not close this tab"
+        : sub;
       overlay.style.display = "flex";
     }
     function hideOverlay() { overlay.style.display = "none"; }
@@ -261,6 +263,9 @@
 
     function refreshCompassForTrial(n) {
       if (!brokerUrl || !pid || n < 1 || (total > 0 && n > total)) return;
+      window.SUBT.compassGoal = null;
+      window.SUBT._lastTrialTimeLimitSec = 30;
+      window.SUBT._lastGoalToleranceM = 0.5;
       fetch(brokerUrl.replace(/\/$/, "") + "/trial-info?pid="
         + encodeURIComponent(pid) + "&trial=" + n)
         .then(function (r) { return r.ok ? r.json() : null; })
@@ -268,6 +273,8 @@
           if (!j) return;
           window.SUBT.compassGoal = j.goal || null;
           window.SUBT.compassTakeover = j.takeover || null;
+          window.SUBT._lastTrialTimeLimitSec = Number(j.time_limit_sec) || 30;
+          window.SUBT._lastGoalToleranceM = Number(j.goal_tolerance_m) || 0.5;
           // Track the current trial's config name so trial-start/-end POSTs
           // can include it. Also used by video/draw modes to auto-play.
           window.SUBT._lastTrialConfig = j.config_name || null;
@@ -437,6 +444,12 @@
       },
       simTimeSec: function () { return simTimeSec; },
       trialElapsedSimSec: function () { return trialElapsedSimSec; },
+      trialTimeLimitSec: function () {
+        return (window.SUBT && window.SUBT._lastTrialTimeLimitSec) || 30;
+      },
+      goalToleranceM: function () {
+        return (window.SUBT && window.SUBT._lastGoalToleranceM) || 0.5;
+      },
       finishAndRelease: function () {
         releaseToBroker(function (j) {
           if (j && j.completion_url && !/REPLACE_ME/.test(j.completion_url))
