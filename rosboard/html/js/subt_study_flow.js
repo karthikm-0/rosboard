@@ -35,7 +35,9 @@
     var raw = qp.get("condition_order") || qp.get("order") || "";
     var order = raw ? raw.split(/[,\s-]+/).join("").toUpperCase().split("") : null;
     if (!order || order.length < 2) order = cfg.conditionOrder || flow.defaultConditionOrder || ["D", "R"];
-    return order.map(function (c) { return c.toUpperCase(); }).filter(function (c) { return c === "D" || c === "R"; });
+    return order.map(function (c) { return c.toUpperCase(); }).filter(function (c) {
+      return c === "D" || c === "R" || c === "W";
+    });
   }
 
   function getCondition(order, slot) {
@@ -78,7 +80,7 @@
     (flow.steps || []).forEach(function (step) {
       if (step.content) paths[step.content] = true;
     });
-    ["D", "R"].forEach(function (condition) {
+    ["D", "R", "W"].forEach(function (condition) {
       paths[contentForCondition("task", condition)] = true;
       paths[contentForCondition("set", condition)] = true;
     });
@@ -302,6 +304,9 @@
     opts = opts || {};
     return new Promise(function (resolve) {
       if (!(window.SUBT && window.SUBT.experimentController)) return resolve();
+      if (opts.condition && typeof window.SUBT.experimentController.prepareCondition === "function") {
+        window.SUBT.experimentController.prepareCondition(opts.condition);
+      }
       if (window.SUBT.experimentController.isReady()) return resolve();
       // Silent: caller (e.g. runTrialSet's parallel path) is showing its own
       // coverage (the whackamole). Skipping this overlay avoids the stale
@@ -475,7 +480,7 @@
   // and startTrial's own overlay are both suppressed (whackamole is covering).
   function runRobotTrial(condition, label, onSetupDone) {
     var silent = typeof onSetupDone === "function";
-    return waitForRobotReady({ silent: silent }).then(function () { return new Promise(function (resolve) {
+    return waitForRobotReady({ silent: silent, condition: condition }).then(function () { return new Promise(function (resolve) {
       hideShell();
       activateViewer().then(function () {
         window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent }, function () {
@@ -546,9 +551,17 @@
   }
 
   function runRobotPractice(step, order) {
-    if (window.SUBT.isReplay) return runVideoPractice(step);
     var condition = step.condition || getCondition(order, step.conditionSlot);
-    return waitForRobotReady().then(function () { return new Promise(function (resolve) {
+    if (window.SUBT && window.SUBT.experimentController &&
+        typeof window.SUBT.experimentController.prepareCondition === "function") {
+      window.SUBT.experimentController.prepareCondition(condition);
+    }
+    if (condition !== "D") {
+      return waitForRobotReady({ condition: condition }).then(function () {
+        return runVideoPractice(step);
+      });
+    }
+    return waitForRobotReady({ condition: condition }).then(function () { return new Promise(function (resolve) {
       hideExperimentOverlay();
       hideShell();
       activateViewer().then(function () {
@@ -639,7 +652,9 @@
   function trialCountForSet(flow, setIndex, total) {
     var sets = flow.trialSets || [];
     var set = sets[setIndex - 1] || {};
-    if (total > 0) return Math.floor(total / 2) + (setIndex === 1 ? total % 2 : 0);
+    if (total > 0 && sets.length) {
+      return Math.floor(total / sets.length) + (setIndex <= total % sets.length ? 1 : 0);
+    }
     return set.defaultCount || 10;
   }
 

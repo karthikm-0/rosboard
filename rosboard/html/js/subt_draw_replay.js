@@ -6,7 +6,6 @@
 // play a recorded segment, let the participant stop it, then draw a path on
 // the lidar view. The drawn path is saved by rosboard's /paths/save endpoint.
 (function () {
-  if (!(window.SUBT && window.SUBT.isDraw)) return;
 
   var cfg = window.SUBT.drawReplay || {};
   var lidarTopic = cfg.lidarTopic || "/X1/points_preview";
@@ -338,6 +337,13 @@
       .catch(function (error) { status.textContent = "play failed: " + error; });
   }
 
+  window.SUBT.startDrawSegment = function (name) {
+    if (!name) return;
+    select.value = name;
+    currentSegment = name;
+    startPlayback();
+  };
+
   stopButton.addEventListener("click", function () {
     stoppedForDrawing = true;
     post("/segments/stop", {}).catch(function () {}).then(function () {
@@ -359,6 +365,7 @@
     var target = lidarCanvas();
     var r = target ? target.getBoundingClientRect() : { width: 0, height: 0 };
     post("/paths/save", {
+      condition: "W",
       segment: currentSegment || select.value,
       topic: lidarTopic,
       canvas: { width: r.width, height: r.height },
@@ -377,6 +384,7 @@
   continueButton.addEventListener("click", continueTrial);
 
   function shouldShow() {
+    if (!(window.SUBT && window.SUBT.isDraw)) return false;
     var flow = window.SUBT && window.SUBT.studyFlow;
     if (!flow || !flow.enabled) return true;
     return !!(window.SUBT && window.SUBT.viewerActive

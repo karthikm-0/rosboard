@@ -35,6 +35,11 @@
       name: cfg.advanceTopic || "/experiment/advance",
       messageType: "std_msgs/msg/Empty",
     });
+    var conditionTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: cfg.conditionTopic || "/experiment/condition",
+      messageType: "std_msgs/msg/String",
+    });
     var clockTopic = new ROSLIB.Topic({
       ros: ros,
       name: cfg.clockTopic || "/clock",
@@ -59,6 +64,7 @@
     var simTimeSec = null;
     var trialStartSimSec = null;
     var trialElapsedSimSec = 0;
+    var preparedCondition = null;
 
     var btn = document.createElement("button");
     btn.id = "subt-next-btn";
@@ -271,6 +277,10 @@
           // same trial-info fetch. Manual segment selection in the picker
           // remains available for practice-mode debugging.
           if (window.SUBT && window.SUBT.isReplay && j.config_name) {
+            if (window.SUBT.isDraw && typeof window.SUBT.startDrawSegment === "function") {
+              window.SUBT.startDrawSegment(j.config_name);
+              return;
+            }
             fetch("/segments/play", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -340,6 +350,16 @@
       showOverlay: showOverlay,
       hideOverlay: hideOverlay,
       expectNextSim: expectNextSim,
+      prepareCondition: function (condition) {
+        condition = String(condition || "D").toUpperCase();
+        if (preparedCondition === condition) return;
+        preparedCondition = condition;
+        if (window.SUBT && typeof window.SUBT.setCondition === "function") {
+          window.SUBT.setCondition(condition);
+        }
+        expectNextSim();
+        conditionTopic.publish(new ROSLIB.Message({ data: condition }));
+      },
       setChromeVisible: function (visible) {
         btn.style.display = visible ? "block" : "none";
         lbl.style.display = visible ? "block" : "none";
@@ -364,7 +384,7 @@
         } else {
           refreshCompassForTrial(currentTrial);
         }
-        if (opts.condition === "R") {
+        if (opts.condition !== "D") {
           if (typeof window.SUBT.setJoystickManual === "function") window.SUBT.setJoystickManual(false);
           this.setJoystickVisible(false);
         } else {

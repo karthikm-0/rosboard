@@ -583,7 +583,7 @@ class PathSaveHandler(_BaseHandler):
         path = os.path.join(out_dir, filename)
         payload = {
             'saved_at': time.time(),
-            'condition': os.environ.get('CONDITION', 'sim'),
+            'condition': body.get('condition') or os.environ.get('CONDITION', 'sim'),
             'segment': body.get('segment'),
             'topic': body.get('topic'),
             'canvas': body.get('canvas'),

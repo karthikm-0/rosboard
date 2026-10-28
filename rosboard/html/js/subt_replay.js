@@ -292,11 +292,6 @@
     return fetch("/segments/list")
       .then((response) => response.json())
       .then((data) => {
-        // Under "auto", any condition other than video gets no picker at all.
-        if (gate === "auto" && data.condition !== "video") {
-          panel.remove();
-          return false;
-        }
         segments = data.segments || [];
         select.innerHTML = "";
         if (!segments.length) {
@@ -438,6 +433,7 @@
   // to those steps. With no study flow (plain rosboard) there is nothing to
   // hide behind, so it stays visible.
   function shouldShow() {
+    if (!(window.SUBT && window.SUBT.isVideo)) return false;
     const flow = window.SUBT && window.SUBT.studyFlow;
     if (!flow || !flow.enabled) return true;
     return !!(window.SUBT && window.SUBT.viewerActive);

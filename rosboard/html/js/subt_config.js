@@ -144,6 +144,7 @@ window.SUBT = {
   experiment: {
     enabled: true,
     advanceTopic: "/experiment/advance",
+    conditionTopic: "/experiment/condition",
     clockTopic: "/clock",
     // Button label / behavior progresses across the sequence:
     //   press 1              -> startLabel  ("Start ▶")       : STARTs trial 1
@@ -207,6 +208,21 @@ window.SUBT.condition = (window.SUBT_ENV && window.SUBT_ENV.condition) || "sim";
 window.SUBT.isVideo = window.SUBT.condition === "video";
 window.SUBT.isDraw = window.SUBT.condition === "draw";
 window.SUBT.isReplay = window.SUBT.isVideo || window.SUBT.isDraw;
+
+// Mixed studies change interface inside one persistent container.
+window.SUBT.setCondition = function (condition) {
+  condition = String(condition || "").toUpperCase();
+  var mode = condition === "D" ? "sim" : (condition === "R" ? "video" : "draw");
+  window.SUBT.condition = mode;
+  window.SUBT.isVideo = mode === "video";
+  window.SUBT.isDraw = mode === "draw";
+  window.SUBT.isReplay = window.SUBT.isVideo || window.SUBT.isDraw;
+  var joystick = document.getElementById("subt-joystick");
+  if (joystick && condition !== "D") joystick.style.display = "none";
+  window.dispatchEvent(new CustomEvent("subt-condition-change", {
+    detail: { condition: condition, mode: mode },
+  }));
+};
 
 // Nothing to drive in the video condition, so the joystick would be a control
 // that silently does nothing. Turn it off rather than show a dead interface.
