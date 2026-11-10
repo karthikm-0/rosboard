@@ -262,41 +262,57 @@
     }
 
     function refreshCompassForTrial(n) {
-      if (!brokerUrl || !pid || n < 1 || (total > 0 && n > total)) return;
+      if (!brokerUrl || !pid || n < 1 || (total > 0 && n > total)) return Promise.resolve();
       window.SUBT.compassGoal = null;
+      window.SUBT._lastTrialConfig = null;
       window.SUBT._lastTrialTimeLimitSec = 30;
       window.SUBT._lastGoalToleranceM = 0.5;
-      fetch(brokerUrl.replace(/\/$/, "") + "/trial-info?pid="
+      return fetch(brokerUrl.replace(/\/$/, "") + "/trial-info?pid="
         + encodeURIComponent(pid) + "&trial=" + n)
-        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (r) { if (!r.ok) throw new Error("Could not load trial metadata"); return r.json(); })
         .then(function (j) {
-          if (!j) return;
           window.SUBT.compassGoal = j.goal || null;
           window.SUBT.compassTakeover = j.takeover || null;
           window.SUBT._lastTrialTimeLimitSec = Number(j.time_limit_sec) || 30;
           window.SUBT._lastGoalToleranceM = Number(j.goal_tolerance_m) || 0.5;
-          // Track the current trial's config name so trial-start/-end POSTs
-          // can include it. Also used by video/draw modes to auto-play.
           window.SUBT._lastTrialConfig = j.config_name || null;
-          // In video mode, real trials auto-play the segment named after the
-          // trial's config (e.g. "config_5"). The compass geometry above and
-          // the video content stay locked together because both come from the
-          // same trial-info fetch. Manual segment selection in the picker
-          // remains available for practice-mode debugging.
-          if (window.SUBT && window.SUBT.isReplay && j.config_name) {
-            if (window.SUBT.isDraw && typeof window.SUBT.startDrawSegment === "function") {
-              window.SUBT.startDrawSegment(j.config_name);
-              return;
-            }
-            fetch("/segments/play", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: j.config_name }),
-            }).catch(function () {});
-          }
-        })
-        .catch(function () {});
+        });
     }
+
+    function handoffService(action) {
+      return new Promise(function (resolve, reject) {
+        // This bundled ROSLIB.Service does not forward a per-call timeout.
+        // Send the protocol request directly: rosbridge otherwise expires it
+        // after 5 seconds, before Gazebo can finish its preparation.
+        var id = "call_service:/experiment/" + action + ":" + (++ros.idCounter);
+        var timeout = setTimeout(function () {
+          ros.removeListener(id, response);
+          reject(new Error("Trial " + action + " timed out"));
+        }, 65000);
+        function response(message) {
+          clearTimeout(timeout);
+          var result = message.values || {};
+          if (message.result !== false && result.success) resolve();
+          else reject(new Error(result.message || String(message.values || "Trial handoff failed")));
+        }
+        ros.once(id, response);
+        ros.callOnConnection({ op: "call_service", id: id,
+          service: "/experiment/" + action, type: "std_srvs/srv/Trigger",
+          args: {}, timeout: 60.0 });
+      });
+    }
+
+    function replayRequest(action, body) {
+      return fetch("/segments/" + action, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      }).then(function (r) { return r.json(); }).then(function (result) {
+        if (!result.ok) throw new Error(result.message || "Replay " + action + " failed");
+        return result;
+      });
+    }
+
+    var releasePreparedTrial = null;
     function completePage() {
       document.body.innerHTML =
         '<div style="font:16px sans-serif;color:#eee;background:#111;'
@@ -378,18 +394,21 @@
       },
       startTrial: function (opts, done) {
         opts = opts || {};
+        opts.condition = opts.condition || (window.SUBT.isReplay ? (window.SUBT.isDraw ? 'W' : 'R') : 'D');
         if (!connected || !simReady || trialActive) return false;
         var isPractice = !!opts.isPractice;
         if (!isPractice) currentTrial += 1;
         trialActive = true;
         trialIsPractice = isPractice;
-        trialStartSimSec = simTimeSec;
+        trialStartSimSec = null;
         trialElapsedSimSec = 0;
+        var metadata;
         if (isPractice) {
           window.SUBT.compassGoal = opts.goal || null;
           window.SUBT.compassTakeover = opts.takeover || null;
+          metadata = Promise.resolve();
         } else {
-          refreshCompassForTrial(currentTrial);
+          metadata = refreshCompassForTrial(currentTrial);
         }
         if (opts.condition !== "D") {
           if (typeof window.SUBT.setJoystickManual === "function") window.SUBT.setJoystickManual(false);
@@ -398,35 +417,68 @@
           this.setJoystickVisible(true);
           if (typeof window.SUBT.setJoystickManual === "function") window.SUBT.setJoystickManual(false);
         }
-        var beforeAdvanceSimSec = simTimeSec;
-        pulse();
-        if (trialStartSimSec == null && simTimeSec != null) trialStartSimSec = simTimeSec;
-        // Log trial start (broker gates on COLLECT_RESPONSES). Skip for
-        // practice trials -- those aren't part of the recorded dataset.
-        if (!isPractice) {
-          postTrialLifecycle("trial-start", currentTrial,
-            { condition: opts.condition || null });
-        }
+        var controller = this;
+        var legacyLive = opts.condition === 'D' && window.SUBT_ENV
+          && window.SUBT_ENV.mode !== 'browser';
+        releasePreparedTrial = null;
+        window.SUBT.trialPrepared = false;
         if (isPractice) trialLbl.textContent = opts.label || "Practice";
         else setTrialLabel(currentTrial);
-        // opts.noOverlay=true: caller is showing its own coverage (e.g. the
-        // whackamole overlay during the minigame->trial transition) and does
-        // not want the "Starting trial N" overlay to peek through when the
-        // caller's overlay dismisses.
-        if (!opts.noOverlay) {
-          showOverlay(isPractice ? "Preparing " + (opts.label || "practice") + "..." : "Starting trial " + currentTrial + "...");
-        }
-        waitForFreshSimTick(beforeAdvanceSimSec, function () {
-          waitForViewerSettled(function () {
-            if (!opts.noOverlay) hideOverlay();
-            if (done) done();
-          });
+        if (!opts.noOverlay) showOverlay("Preparing trial...");
+        metadata.then(function () {
+          // Terminal/standalone runners retain their two-pulse interface.
+          // Browser sessions use the coordinator's prepare/release handshake.
+          if (legacyLive) {
+            var before = simTimeSec;
+            pulse();
+            return new Promise(function (resolve) {
+              waitForFreshSimTick(before, function () { waitForViewerSettled(resolve); });
+            });
+          }
+          if (opts.condition === "D") return handoffService("prepare");
+          var name = currentConfigName() || (window.SUBT.getSelectedSegment && window.SUBT.getSelectedSegment());
+          if (!name) throw new Error("No replay segment selected");
+          var opened = window.SUBT.isDraw && typeof window.SUBT.startDrawSegment === "function"
+            ? window.SUBT.startDrawSegment(name, { paused: true })
+            : replayRequest("play", { name: name, paused: true });
+          return Promise.resolve(opened).then(function () { return replayRequest("seek", { offset: 0 }); });
+        }).then(function () {
+          window.SUBT.trialPrepared = true;
+          return window.SUBT.waitForCameraReady ? window.SUBT.waitForCameraReady() : Promise.resolve();
+        }).then(function () {
+          releasePreparedTrial = function () {
+            window.SUBT.trialPrepared = false;
+            return (legacyLive ? Promise.resolve()
+              : opts.condition === "D" ? handoffService("resume") : replayRequest("resume"))
+              .then(function () {
+                if (window.SUBT.releaseCameraPreview) window.SUBT.releaseCameraPreview();
+                trialStartSimSec = simTimeSec;
+                trialElapsedSimSec = 0;
+                if (!isPractice) postTrialLifecycle("trial-start", currentTrial, { condition: opts.condition || null });
+              });
+          };
+          if (!opts.noOverlay) hideOverlay();
+          if (opts.deferStart) { if (done) done(); }
+          else return controller.resumeTrial().then(function () { if (done) done(); });
+        }).catch(function (error) {
+          releasePreparedTrial = null;
+          showOverlay("Trial could not start", error.message);
+          if (opts.onError) opts.onError(error);
         });
         return true;
       },
+      resumeTrial: function () {
+        if (!releasePreparedTrial) return Promise.reject(new Error("Trial is not prepared"));
+        var release = releasePreparedTrial;
+        releasePreparedTrial = null;
+        return release();
+      },
       stopTrial: function (done) {
         if (!trialActive) { if (done) done(); return false; }
-        pulse();
+        releasePreparedTrial = null;
+        window.SUBT.trialPrepared = false;
+        if (window.SUBT.isReplay) replayRequest("stop").catch(function () {});
+        else pulse();
         var wasPractice = trialIsPractice;
         trialActive = false;
         trialIsPractice = false;

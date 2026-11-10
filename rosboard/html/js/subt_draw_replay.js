@@ -306,7 +306,8 @@
       });
   }
 
-  function startPlayback() {
+  function startPlayback(opts) {
+    opts = opts || {};
     if (!select.value) return;
     exitDrawing();
     stoppedForDrawing = false;
@@ -314,19 +315,19 @@
     if (overlay) redraw();
     currentSegment = select.value;
     status.textContent = "playing " + currentSegment + "...";
-    post("/segments/play", { name: currentSegment })
+    return post("/segments/play", { name: currentSegment, paused: !!opts.paused })
       .then(function (data) {
-        if (!data.ok) status.textContent = "error: " + (data.error || data.message);
+        if (!data.ok) { status.textContent = "error: " + (data.error || data.message); throw new Error(data.error || data.message); }
         else saveButton.disabled = false;
       })
-      .catch(function (error) { status.textContent = "play failed: " + error; });
+      .catch(function (error) { status.textContent = "play failed: " + error; if (opts.paused) throw error; });
   }
 
-  window.SUBT.startDrawSegment = function (name) {
+  window.SUBT.startDrawSegment = function (name, opts) {
     if (!name) return;
     select.value = name;
     currentSegment = name;
-    startPlayback();
+    return startPlayback(opts);
   };
 
   stopButton.addEventListener("click", function () {
@@ -403,7 +404,10 @@
       ensureOverlay(true);
       positionOverlay();
       reposition();
-      if (!startedForThisView && !stoppedForDrawing && segments.length) {
+      // Study trials are explicitly prepared paused by the experiment
+      // controller. Becoming visible must never restart/release that replay.
+      var flowOwnsPlayback = window.SUBT.studyFlow && window.SUBT.studyFlow.enabled;
+      if (!flowOwnsPlayback && !startedForThisView && !stoppedForDrawing && segments.length) {
         startedForThisView = true;
         startPlayback();
       }

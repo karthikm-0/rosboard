@@ -340,6 +340,19 @@ class SegmentPlayer(object):
             self.paused = not self.paused
         return True, 'paused' if self.paused else 'playing'
 
+    def resume(self):
+        """Explicit, idempotent release of a prepared replay."""
+        try:
+            from rosbag2_interfaces.srv import Resume
+        except ImportError:
+            return False, 'rosbag2_interfaces unavailable'
+        if self.process is None or self.process.poll() is not None:
+            return False, 'nothing playing'
+        if self._call('resume', Resume, Resume.Request()) is None:
+            return False, 'player not responding'
+        self.paused = False
+        return True, 'playing'
+
     # Mid-drag scrub burst. Sized larger than one image period so that even if
     # rosboard's single-threaded img.py compressor drops most frames from the
     # burst, the LAST camera message in the burst lands cleanly and the view
@@ -491,6 +504,40 @@ class _BaseHandler(tornado.web.RequestHandler):
         self.finish(json.dumps(payload))
 
 
+class CameraPreview:
+    """Cache compressed camera bytes so a paused source can prime a new browser."""
+
+    def __init__(self):
+        self.frame = None
+        self.subscription = None
+        node = _ros_node()
+        if node is not None:
+            from sensor_msgs.msg import CompressedImage
+            from rclpy.qos import QoSProfile, ReliabilityPolicy
+            self.subscription = node.create_subscription(
+                CompressedImage, '/X1/front/image_raw/compressed', self.receive,
+                QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE))
+
+    def receive(self, message):
+        if 'jpeg' in message.format.lower():
+            self.frame = bytes(message.data)
+
+
+class CameraPreviewHandler(tornado.web.RequestHandler):
+    def initialize(self, preview):
+        self.preview = preview
+
+    def get(self):
+        self.set_header('Cache-Control', 'no-store')
+        frame = self.preview.frame
+        if frame is None:
+            self.set_status(503)
+            self.finish('Camera preview is not available yet')
+            return
+        self.set_header('Content-Type', 'image/jpeg')
+        self.finish(frame)
+
+
 class SegmentListHandler(_BaseHandler):
     def get(self):
         # `condition` lets the browser decide whether to show the picker at
@@ -555,6 +602,8 @@ class SegmentTransportHandler(_BaseHandler):
             )
         elif self.action == 'rate':
             ok, message = self.player.set_rate(body.get('rate', 1.0))
+        elif self.action == 'resume':
+            ok, message = self.player.resume()
         else:
             ok, message = False, 'unknown action'
         self.respond({'ok': ok, 'message': message, 'status': self.player.status()},
@@ -621,7 +670,9 @@ class SubtEnvHandler(tornado.web.RequestHandler):
 def make_handlers(segment_dir=None):
     """Return (routes, player) to splice into rosboard's tornado app."""
     player = SegmentPlayer(os.path.expanduser(segment_dir or DEFAULT_SEGMENT_DIR))
+    preview = CameraPreview()
     routes = [
+        (r'/camera/preview.jpg', CameraPreviewHandler, {'preview': preview}),
         (r'/subt_env.js', SubtEnvHandler),
         (r'/segments/list', SegmentListHandler, {'player': player}),
         (r'/segments/play', SegmentPlayHandler, {'player': player}),
@@ -630,6 +681,7 @@ def make_handlers(segment_dir=None):
         (r'/segments/toggle', SegmentTransportHandler, {'player': player, 'action': 'toggle'}),
         (r'/segments/seek', SegmentTransportHandler, {'player': player, 'action': 'seek'}),
         (r'/segments/rate', SegmentTransportHandler, {'player': player, 'action': 'rate'}),
+        (r'/segments/resume', SegmentTransportHandler, {'player': player, 'action': 'resume'}),
         (r'/paths/save', PathSaveHandler, {'player': player}),
     ]
     return routes, player

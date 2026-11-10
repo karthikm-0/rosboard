@@ -581,36 +581,43 @@
   // and startTrial's own overlay are both suppressed (whackamole is covering).
   function runRobotTrial(condition, label, onSetupDone) {
     var silent = typeof onSetupDone === "function";
-    return waitForRobotReady({ silent: silent, condition: condition }).then(function () { return new Promise(function (resolve) {
+    return waitForRobotReady({ silent: silent, condition: condition }).then(function () { return new Promise(function (resolve, reject) {
       hideShell();
       activateViewer().then(function () {
-        window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent }, function () {
-          if (silent) { try { onSetupDone(); } catch (e) {} }
-          var lastElapsed = 0;
-          var finished = condition === "D"
-            ? waitForDriveOutcome(Date.now())
-            : waitForTrialButton(
-                condition === "R" ? "Submit" : "End Robot Trial",
-                condition === "W"
-              ).then(function () {
-                return { outcome: "submitted" };
-              });
-          finished.then(function (result) {
-            lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
-            var outcomeDelay = condition === "D" ? showDriveOutcome(result) : Promise.resolve();
-            outcomeDelay.then(function () {
-              hideShell();
-              window.SUBT.experimentController.stopTrial(function () {
-              setViewerActive(false);
-              hideExperimentOverlay();
-              var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
-              var afterStop = condition === "R" && reportWhenReadySliderEnabled()
-                ? showReportWhenReadyQuestion(elapsed)
-                : Promise.resolve();
-              afterStop.then(issueQuestions).then(resolve);
+        window.SUBT.experimentController.startTrial({ condition: condition, noOverlay: silent,
+          deferStart: silent, onError: reject }, function () {
+          function beginParticipantTrial() {
+            var lastElapsed = 0;
+            var finished = condition === "D"
+              ? waitForDriveOutcome(Date.now())
+              : waitForTrialButton(
+                  condition === "R" ? "Submit" : "End Robot Trial",
+                  condition === "W"
+                ).then(function () {
+                  return { outcome: "submitted" };
+                });
+            finished.then(function (result) {
+              lastElapsed = window.SUBT.experimentController.trialElapsedSimSec();
+              var outcomeDelay = condition === "D" ? showDriveOutcome(result) : Promise.resolve();
+              outcomeDelay.then(function () {
+                hideShell();
+                window.SUBT.experimentController.stopTrial(function () {
+                setViewerActive(false);
+                hideExperimentOverlay();
+                var elapsed = window.SUBT.experimentController.trialElapsedSimSec() || lastElapsed;
+                var afterStop = condition === "R" && reportWhenReadySliderEnabled()
+                  ? showReportWhenReadyQuestion(elapsed)
+                  : Promise.resolve();
+                afterStop.then(issueQuestions).then(resolve);
+                });
               });
             });
-          });
+          }
+          if (silent) {
+            onSetupDone(function () {
+              return window.SUBT.experimentController.resumeTrial().then(beginParticipantTrial);
+            });
+          } else beginParticipantTrial();
         });
       });
     }); });
@@ -628,8 +635,9 @@
         hideExperimentOverlay();
         var name = (step.videoSegment
           || (window.SUBT.getSelectedSegment && window.SUBT.getSelectedSegment()));
-        var started = name
-          ? fetch("/segments/play", {
+        var started = name && step.condition === 'W' && window.SUBT.startDrawSegment
+          ? window.SUBT.startDrawSegment(name)
+          : name ? fetch("/segments/play", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: name }),
@@ -724,19 +732,35 @@
             // The minigame stays up until both its timer runs out AND
             // onSetupDone fires -- so the "Starting trial N" overlay never
             // shows and there's no visible gap into the trial view.
-            var setupDone;
+            var setupDone, releaseTrial, setupError;
             var setupPromise = new Promise(function (r) { setupDone = r; });
-            var trialFullPromise = runRobotTrial(condition, "Robot Trial " + n, setupDone);
+            var trialFullPromise = runRobotTrial(condition, "Robot Trial " + n, function (release) {
+              releaseTrial = release;
+              setupDone();
+            });
+            trialFullPromise.catch(function (error) { setupError = error; setupDone(); });
+            function revealAndRelease() {
+              return setupPromise.then(function () {
+                if (setupError) throw setupError;
+                // Let removal of the full-screen minigame reach the display
+                // before asking physics or bag playback to advance.
+                return new Promise(function (painted) {
+                  requestAnimationFrame(function () { requestAnimationFrame(painted); });
+                });
+              }).then(function () { return releaseTrial(); }).then(function () {
+                return trialFullPromise;
+              }).then(resolve).catch(function (error) {
+                window.SUBT.experimentController.showOverlay("Trial could not start", error.message);
+              });
+            }
 
             if (window.SUBT && typeof window.SUBT.showMinigame === "function") {
               var current = window.SUBT.experimentController.currentTrial();
               var trialNumber = current + 1;
               var opts = trialWhackamoleOptions(trialNumber);
               opts.scoreOffset = cumulativeWhackamoleScore;
-              // Debug: skip the setup gate so whackamole ends on its own
-              // timer instead of waiting up to ~15s for sensor readiness.
-              // Production still gates on setup to guarantee zero visible gap.
-              if (!debugMode()) opts.waitFor = setupPromise;
+              // Debug shortens the game, but must still wait for preparation.
+              opts.waitFor = setupPromise;
               window.SUBT.showMinigame(function (result) {
                 result = result || { score: 0, hits: 0, misses: 0 };
                 cumulativeWhackamoleScore += Number(result.score) || 0;
@@ -749,10 +773,10 @@
                 }, trialNumber);
                 // Minigame gone, sim visible. Wait for the participant to
                 // finish the trial (end-button + stop + questions).
-                trialFullPromise.then(resolve);
+                revealAndRelease();
               }, opts);
             } else {
-              trialFullPromise.then(resolve);
+              revealAndRelease();
             }
           });
         });

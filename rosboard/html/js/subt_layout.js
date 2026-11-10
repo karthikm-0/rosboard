@@ -194,56 +194,121 @@
     }
   }, 100);
 
-  // Body-level fixed-position MJPEG img that overlays the camera
-  // placeholder card. MJPEG-in-img has a memory-leak footgun: the browser
-  // buffers the never-ending multipart response forever, growing to hundreds
-  // of MB and then stalling. We cycle the img element every REFRESH_SEC to
-  // force the browser to close the old connection + release its buffer.
-  // Doubled buffer trick: create a hidden next img and wait for its first
-  // frame before killing the old one, so there's no visible black flicker.
-  // 5s → max ~25 MB buffered per cycle at 30 fps × ~180 KB/frame. Longer
-  // intervals let the browser accumulate hundreds of MB and stall the tab.
-  // Shorter (e.g. 2s) risks visible reconnect flicker.
-  var REFRESH_SEC = 5;
+  // Body-level fixed-position MJPEG img that overlays the camera placeholder.
+  // Chromium can retain an unbounded multipart buffer, so the connection is
+  // recycled occasionally.  The old 5s timer waited up to 3s with TWO streams
+  // open on every cycle; under load that meant duplicate decoding most of the
+  // time and made later trials progressively laggy.  Use a longer interval,
+  // allow only one replacement at a time, and close all streams while the tab
+  // is hidden. naturalWidth is polled because MJPEG <img> load events are not
+  // reliable across browsers.
+  var REFRESH_SEC = cfg.mjpegRefreshSec || 20;
   var fixedCameraImg = null;
-  function makeImg() {
+  var pendingCameraImg = null;
+  var recycleInFlight = false;
+  var recycleGeneration = 0;
+  function makeImg(url) {
     var img = document.createElement("img");
     img.style.cssText =
       "position:fixed;z-index:1;object-fit:cover;background:#000;display:none;";
     // Cache-bust so the browser opens a fresh connection each cycle.
-    img.src = mjpegUrlFor(camTopic).replace(/&type=[^&]+/, "&type=mjpeg")
-              + "&_t=" + Date.now();
+    img.src = url || (mjpegUrlFor(camTopic).replace(/&type=[^&]+/, "&type=mjpeg")
+              + "&_t=" + Date.now());
     document.body.appendChild(img);
     return img;
   }
   function ensureFixedCameraImg() {
+    if (document.hidden) return null;
     if (fixedCameraImg) return fixedCameraImg;
     fixedCameraImg = makeImg();
     return fixedCameraImg;
   }
-  // Periodic recycle. Every REFRESH_SEC: spin up a new img, once it's
-  // rendering, swap it in and destroy the old one. This closes the old
-  // WS/HTTP connection and frees the buffered stream memory.
-  setInterval(function () {
-    if (!fixedCameraImg) return;
+  // A finite JPEG has a reliable load event, and the server caches it even
+  // after physics pauses. MJPEG connections opened before startup can fail;
+  // their image dimensions must not be the trial readiness signal.
+  window.SUBT.waitForCameraReady = function () {
+    var deadline = Date.now() + 8000;
+    function attempt() {
+      return fetch("/camera/preview.jpg?_t=" + Date.now(), { cache: "no-store" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("Camera preview is not available yet");
+          return response.blob();
+        }).then(function (blob) {
+          return new Promise(function (resolve, reject) {
+            var url = URL.createObjectURL(blob);
+            var next = makeImg(url);
+            next.__previewUrl = url;
+            next.onload = function () {
+              var old = fixedCameraImg;
+              fixedCameraImg = next;
+              positionFixedCameraImg();
+              closeImg(old);
+              resolve();
+            };
+            next.onerror = function () { closeImg(next); reject(new Error("Camera preview could not be decoded")); };
+          });
+        }).catch(function (error) {
+          if (Date.now() >= deadline) throw error;
+          return new Promise(function (resolve) { setTimeout(resolve, 200); }).then(attempt);
+        });
+    }
+    return attempt();
+  };
+  window.SUBT.releaseCameraPreview = function () {
+    // Keep the finite preview visible until the live stream has a frame.
+    recycleCameraImg();
+  };
+  function closeImg(img) {
+    if (!img) return;
+    try { img.src = ""; img.remove(); } catch (e) {}
+    if (img.__previewUrl) URL.revokeObjectURL(img.__previewUrl);
+  }
+  function recycleCameraImg() {
+    if (document.hidden || window.SUBT.trialPrepared || !fixedCameraImg || recycleInFlight) return;
+    recycleInFlight = true;
+    var generation = ++recycleGeneration;
     var next = makeImg();
-    // Wait until the new img has decoded at least one frame, then swap.
-    // Fallback timer in case the load event never fires.
-    var swapped = false;
-    var doSwap = function () {
-      if (swapped) return;
-      swapped = true;
-      var old = fixedCameraImg;
-      fixedCameraImg = next;
+    pendingCameraImg = next;
+    var started = Date.now();
+    var poll = setInterval(function () {
+      if (generation !== recycleGeneration) {
+        clearInterval(poll);
+        return;
+      }
+      var ready = next.naturalWidth > 0;
+      var timedOut = Date.now() - started >= 2000;
+      if (!ready && !timedOut && !document.hidden) return;
+      clearInterval(poll);
+      if (document.hidden || !ready) {
+        // A paused source may not send a frame to a new connection. Keep the
+        // decoded image instead of replacing it with a blank timed-out img.
+        closeImg(next);
+      } else {
+        var old = fixedCameraImg;
+        fixedCameraImg = next;
+        positionFixedCameraImg();
+        closeImg(old);
+      }
+      pendingCameraImg = null;
+      recycleInFlight = false;
+    }, 100);
+  }
+  setInterval(recycleCameraImg, REFRESH_SEC * 1000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      recycleGeneration += 1;
+      closeImg(pendingCameraImg);
+      closeImg(fixedCameraImg);
+      pendingCameraImg = null;
+      fixedCameraImg = null;
+      recycleInFlight = false;
+    } else {
       positionFixedCameraImg();
-      // Killing src + removing releases the buffered stream.
-      try { old.src = ""; old.remove(); } catch (e) {}
-    };
-    next.addEventListener("load", doSwap);
-    setTimeout(doSwap, 3000);
-  }, REFRESH_SEC * 1000);
+    }
+  });
   function positionFixedCameraImg() {
     var img = ensureFixedCameraImg();
+    if (!img) return;
     var placeholder = document.querySelector('.card[data-topic="' + camTopic + '"]');
     if (!placeholder) { img.style.display = "none"; return; }
     var r = placeholder.getBoundingClientRect();
